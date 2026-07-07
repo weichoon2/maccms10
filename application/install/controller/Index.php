@@ -223,7 +223,20 @@ class Index extends Controller
 		if ($res === false) {
 			return $this->error(lang('write_err_config'));
 		}
-		
+
+		// 通知中心：VIP 到期提醒定時任務（冪等，僅在缺失時注入，不覆蓋用戶調整）
+		mac_inject_timming_task('notify_vip_expire', [
+			'id'      => 'notify_vip_expire',
+			'status'  => '0',
+			'name'    => 'notify_vip_expire',
+			'des'     => 'VIP到期提醒通知',
+			'file'    => 'notify',
+			'param'   => 'days=3',
+			'weeks'   => '1,2,3,4,5,6,0',
+			'hours'   => '00,06,12,18',
+			'runtime' => 0,
+		]);
+
         // 导入系统初始数据库结构
         // 导入SQL
         $sql_file = APP_PATH.'install/sql/install.sql';

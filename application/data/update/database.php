@@ -108,6 +108,18 @@ if(empty($col_list[$pre.'notify_read'])){
     $sql .= "ALTER TABLE `{$pre}notify_read` ENGINE=InnoDB;";
     $sql .="\r";
 }
+// 通知中心：VIP 到期提醒定時任務（冪等，僅在缺失時注入，不覆蓋用戶調整）
+mac_inject_timming_task('notify_vip_expire', [
+    'id'      => 'notify_vip_expire',
+    'status'  => '0',
+    'name'    => 'notify_vip_expire',
+    'des'     => 'VIP到期提醒通知',
+    'file'    => 'notify',
+    'param'   => 'days=3',
+    'weeks'   => '1,2,3,4,5,6,0',
+    'hours'   => '00,06,12,18',
+    'runtime' => 0,
+]);
 if(!empty($col_list[$pre.'user']) && empty($col_list[$pre.'user']['user_down_quota'])){
     $sql .= "ALTER TABLE `{$pre}user` ADD `user_down_quota` int(10) unsigned NOT NULL DEFAULT '0' COMMENT '下载额度' AFTER `user_points_froze`;";
     $sql .="\r";
