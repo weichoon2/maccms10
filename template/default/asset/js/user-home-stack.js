@@ -1878,6 +1878,15 @@
                 if (!insideHead && headZ > 0) {
                     maxZ = Math.max(maxZ, headZ + 2);
                 }
+                try {
+                    var cwFab = document.querySelector('.mac-cw-fab:not(.fn-hide)');
+                    if (cwFab) {
+                        var cwZ = MAC.parseZIndexEl(cwFab);
+                        if (cwZ > maxZ) {
+                            maxZ = cwZ;
+                        }
+                    }
+                } catch (eCw) {}
             } catch (e) {}
             var cap = 2147483000;
             var next = Math.max(floor, maxZ + 2);

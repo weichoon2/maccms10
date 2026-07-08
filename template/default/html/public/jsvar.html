@@ -14,6 +14,7 @@ var maccms = {
     "vodPlaylink": {:json_encode(isset($mac_vod_playlink) && (int)$mac_vod_playlink === 1)},
     "coverSerialBadge": {:json_encode(!isset($tplconfig['theme']['badge']['serial_btn']) || (string)$tplconfig['theme']['badge']['serial_btn'] !== '0')},
     "coverSubTitle": {:json_encode(!isset($tplconfig['theme']['badge']['cover_sub_btn']) || (string)$tplconfig['theme']['badge']['cover_sub_btn'] !== '0')},
+    "themeDefaultColor": {:json_encode(isset($tplconfig['theme']['color']['ms']) ? (string)$tplconfig['theme']['color']['ms'] : 'white', JSON_UNESCAPED_UNICODE)},
     "logoLottieUrls": {:json_encode(array(
         'head_w' => mac_url_img(isset($tplconfig['theme']['logo']['wpic']) && $tplconfig['theme']['logo']['wpic'] ? $tplconfig['theme']['logo']['wpic'] : 'template/default/images/la/logo-mobile-white.png'),
         'head_b' => mac_url_img(isset($tplconfig['theme']['logo']['bpic']) && $tplconfig['theme']['logo']['bpic'] ? $tplconfig['theme']['logo']['bpic'] : 'template/default/images/la/logo-mobile-black.png'),
