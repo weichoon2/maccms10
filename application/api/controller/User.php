@@ -427,10 +427,10 @@ class User extends Base
         $uid = intval($check['info']['user_id']);
         $param = $request->param();
         $update = [];
-        if (!empty($param['user_nick_name'])) $update['user_nick_name'] = mac_filter_xss(trim($param['user_nick_name']));
-        if (!empty($param['user_email'])) $update['user_email'] = mac_filter_xss(trim($param['user_email']));
-        if (!empty($param['user_phone'])) $update['user_phone'] = mac_filter_xss(trim($param['user_phone']));
-        if (!empty($param['user_qq'])) $update['user_qq'] = mac_filter_xss(trim($param['user_qq']));
+        if (!empty($param['user_nick_name'])) $update['user_nick_name'] = htmlspecialchars(trim($param['user_nick_name']));
+        if (!empty($param['user_email'])) $update['user_email'] = htmlspecialchars(trim($param['user_email']));
+        if (!empty($param['user_phone'])) $update['user_phone'] = htmlspecialchars(trim($param['user_phone']));
+        if (!empty($param['user_qq'])) $update['user_qq'] = htmlspecialchars(trim($param['user_qq']));
         // 修改密码（使用单重 md5，与 model 层 User::saveData / login / register 保持一致）
         if (!empty($param['user_new_pwd']) && !empty($param['user_old_pwd'])) {
             $userInfo = Db::name('User')->field('user_pwd')->where('user_id', $uid)->find();
