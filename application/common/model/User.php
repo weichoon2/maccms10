@@ -377,6 +377,31 @@ class User extends Base
         return ['code' => 1, 'msg' => 'ok'];
     }
 
+    /**
+     * 重新鉴权：校验当前用户密码（bind/unbind 变更绑定联系方式前调用）
+     * @param string $password_raw 用户提交的当前密码明文
+     * @return array|null 校验通过返回 null，失败返回 ['code'=>..., 'msg'=>...]
+     */
+    private function verifyCurrentPassword($password_raw)
+    {
+        if ($password_raw === '') {
+            return ['code' => 1001, 'msg' => lang('model/user/input_old_pass')];
+        }
+        $uid = intval($GLOBALS['user']['user_id'] ?? 0);
+        if ($uid < 1) {
+            return ['code' => 1002, 'msg' => lang('model/user/not_login')];
+        }
+        $storedHash = $this->where('user_id', $uid)->value('user_pwd');
+        $storedHash = $storedHash === null ? '' : (string) $storedHash;
+        // 兼容 bcrypt / md5(trim) / md5(formatted) / 明文（与 login()、info() 一致）。
+        // 密码迁移到 bcrypt 后旧的 md5 比对必然失败，统一委托 mac_verify_password。
+        $ok = mac_verify_password($password_raw, $storedHash);
+        if (!$ok) {
+            return ['code' => 1002, 'msg' => lang('model/user/old_pass_err')];
+        }
+        return null;
+    }
+
     public function info($param)
     {
         $pwd_old = isset($param['user_pwd']) ? trim($param['user_pwd']) : '';
@@ -1245,6 +1270,13 @@ class User extends Base
 
     public function bind($param)
     {
+        // 重新鉴权：变更绑定邮箱/手机前要求当前密码
+        $pwd = isset($param['user_pwd']) ? trim($param['user_pwd']) : '';
+        $pwdErr = $this->verifyCurrentPassword($pwd);
+        if ($pwdErr !== null) {
+            return $pwdErr;
+        }
+
         $param['type'] = 1;
         $res = $this->check_msg($param);
         if($res['code'] >1){
@@ -1279,6 +1311,12 @@ class User extends Base
     {
         if(!in_array($param['ac'],['email','phone']) ){
             return ['code'=>2001,'msg'=>lang('param_err')];
+        }
+        // 重新鉴权：解绑邮箱/手机前要求当前密码
+        $pwd = isset($param['user_pwd']) ? trim($param['user_pwd']) : '';
+        $pwdErr = $this->verifyCurrentPassword($pwd);
+        if ($pwdErr !== null) {
+            return $pwdErr;
         }
         $col = 'user_email';
         if($param['ac']=='phone'){

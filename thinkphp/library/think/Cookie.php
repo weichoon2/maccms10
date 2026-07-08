@@ -105,10 +105,21 @@ class Cookie
         0;
 
         if ($config['setcookie']) {
-            setcookie(
-                $name, $value, $expire, $config['path'], $config['domain'],
-                $config['secure'], $config['httponly']
-            );
+            if (isset($config['samesite']) && PHP_VERSION_ID >= 70300) {
+                setcookie($name, $value, [
+                    'expires'  => $expire,
+                    'path'     => $config['path'],
+                    'domain'   => $config['domain'],
+                    'secure'   => $config['secure'],
+                    'httponly' => $config['httponly'],
+                    'samesite' => $config['samesite'],
+                ]);
+            } else {
+                setcookie(
+                    $name, $value, $expire, $config['path'], $config['domain'],
+                    $config['secure'], $config['httponly']
+                );
+            }
         }
 
         $_COOKIE[$name] = $value;
@@ -207,10 +218,21 @@ class Cookie
         $name   = $prefix . $name;
 
         if ($config['setcookie']) {
-            setcookie(
-                $name, '', $_SERVER['REQUEST_TIME'] - 3600, $config['path'],
-                $config['domain'], $config['secure'], $config['httponly']
-            );
+            if (isset($config['samesite']) && PHP_VERSION_ID >= 70300) {
+                setcookie($name, '', [
+                    'expires'  => $_SERVER['REQUEST_TIME'] - 3600,
+                    'path'     => $config['path'],
+                    'domain'   => $config['domain'],
+                    'secure'   => $config['secure'],
+                    'httponly' => $config['httponly'],
+                    'samesite' => $config['samesite'],
+                ]);
+            } else {
+                setcookie(
+                    $name, '', $_SERVER['REQUEST_TIME'] - 3600, $config['path'],
+                    $config['domain'], $config['secure'], $config['httponly']
+                );
+            }
         }
 
         // 删除指定 cookie
@@ -239,10 +261,21 @@ class Cookie
             foreach ($_COOKIE as $key => $val) {
                 if (0 === strpos($key, $prefix)) {
                     if ($config['setcookie']) {
-                        setcookie(
-                            $key, '', $_SERVER['REQUEST_TIME'] - 3600, $config['path'],
-                            $config['domain'], $config['secure'], $config['httponly']
-                        );
+                        if (isset($config['samesite']) && PHP_VERSION_ID >= 70300) {
+                            setcookie($key, '', [
+                                'expires'  => $_SERVER['REQUEST_TIME'] - 3600,
+                                'path'     => $config['path'],
+                                'domain'   => $config['domain'],
+                                'secure'   => $config['secure'],
+                                'httponly' => $config['httponly'],
+                                'samesite' => $config['samesite'],
+                            ]);
+                        } else {
+                            setcookie(
+                                $key, '', $_SERVER['REQUEST_TIME'] - 3600, $config['path'],
+                                $config['domain'], $config['secure'], $config['httponly']
+                            );
+                        }
                     }
 
                     unset($_COOKIE[$key]);

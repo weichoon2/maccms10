@@ -4,6 +4,7 @@ namespace app\api\controller;
 
 use think\Db;
 use think\Request;
+use app\common\util\CsrfGuard;
 
 /**
  * 支付/充值 API
@@ -14,6 +15,7 @@ use think\Request;
 class Payment extends Base
 {
     use PublicApi;
+    use CsrfGuard;
 
     public function __construct()
     {
@@ -199,6 +201,9 @@ class Payment extends Base
     {
         $auth = $this->_checkLogin();
         if (!$auth['ok']) return $auth['response'];
+
+        $csrfErr = $this->checkCsrf();
+        if ($csrfErr !== null) return json($csrfErr);
 
         $param = $request->param();
 

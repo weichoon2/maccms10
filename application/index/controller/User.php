@@ -6,9 +6,11 @@ use think\Request;
 use login\ThinkOauth;
 use app\index\event\LoginEvent;
 use app\common\util\Qrcode;
+use app\common\util\CsrfGuard;
 
 class User extends Base
 {
+    use CsrfGuard;
     public function __construct()
     {
         parent::__construct();
@@ -327,6 +329,10 @@ class User extends Base
     public function bindmsg()
     {
         $param = input();
+        $csrfErr = $this->checkCsrf();
+        if ($csrfErr !== null) {
+            return json($csrfErr);
+        }
         $res = model('User')->bindmsg($param);
         return json($res);
     }
@@ -335,6 +341,10 @@ class User extends Base
     {
         $param = input();
         if (Request()->isPost()) {
+            $csrfErr = $this->checkCsrf();
+            if ($csrfErr !== null) {
+                return json($csrfErr);
+            }
             $res = model('User')->bind($param);
             return json($res);
         }
@@ -355,6 +365,10 @@ class User extends Base
     {
         $param = input();
         if (Request()->isPost()) {
+            $csrfErr = $this->checkCsrf();
+            if ($csrfErr !== null) {
+                return json($csrfErr);
+            }
             $res = model('User')->unbind($param);
             return json($res);
         }
@@ -366,6 +380,11 @@ class User extends Base
     {
         $param = input();
         if (Request()->isPost()) {
+            $csrfErr = $this->checkCsrf();
+            if ($csrfErr !== null) {
+                $this->error($csrfErr['msg']);
+                exit;
+            }
             $res = model('User')->info($param);
             if ($res['code'] == 1) {
                 $this->success($res['msg']);
@@ -544,6 +563,14 @@ class User extends Base
     {
         $param = input();
 
+        // gopay 可由传统表单 POST 提交（非 AJAX），需 CSRF 校验
+        if (Request()->isPost()) {
+            $csrfErr = $this->checkCsrf();
+            if ($csrfErr !== null) {
+                return $this->error($csrfErr['msg']);
+            }
+        }
+
         $order_code = htmlspecialchars(urldecode(trim($param['order_code'])));
         $order_id = intval((trim($param['order_id'])));
         $payment = strtolower(htmlspecialchars(urldecode(trim($param['payment']))));
@@ -602,6 +629,10 @@ class User extends Base
     {
         $param = input();
         if (Request()->isPost()) {
+            $csrfErr = $this->checkCsrf();
+            if ($csrfErr !== null) {
+                return json($csrfErr);
+            }
             $res = model('User')->upgrade($param);
             return json($res);
         }
@@ -868,6 +899,10 @@ class User extends Base
         if (!request()->isPost()) {
             return json(['code' => 1001, 'msg' => lang('param_err')]);
         }
+        $csrfErr = $this->checkCsrf();
+        if ($csrfErr !== null) {
+            return json($csrfErr);
+        }
         $param = input('post.');
         $goods_id = intval($param['goods_id'] ?? 0);
         $quantity = max(1, intval($param['quantity'] ?? 1));
@@ -910,6 +945,10 @@ class User extends Base
     {
         $param = input();
         if (Request()->isPost()) {
+            $csrfErr = $this->checkCsrf();
+            if ($csrfErr !== null) {
+                return json($csrfErr);
+            }
             $param['user_id'] = $GLOBALS['user']['user_id'];
             $res = model('Cash')->saveData($param);
             return json($res);

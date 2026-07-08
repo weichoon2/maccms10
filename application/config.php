@@ -232,6 +232,8 @@ return [
         'secure'    => false,
         // httponly设置
         'httponly'  => '',
+        // cookie SameSite 设置（Lax 减轻跨站请求伪造）
+        'samesite'  => 'Lax',
         // 是否使用 setcookie
         'setcookie' => true,
     ],

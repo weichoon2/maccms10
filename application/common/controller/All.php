@@ -182,6 +182,18 @@ polyfill;
         }
         $GLOBALS['user'] = $user;
         $this->assign('user',$user);
+
+        // 为已登录用户生成 session 内稳定的 CSRF token（非一次性销毁，适配 AJAX 场景）
+        if (!empty($user['user_id']) && !session('?csrf_token')) {
+            session('csrf_token', bin2hex(random_bytes(16)));
+        }
+        $csrfToken = '';
+        if (session('?csrf_token')) {
+            $csrfToken = (string)session('csrf_token');
+            // 通过 cookie 暴露给前端（双重提交模式），非 httponly 以便 JS 读取
+            cookie('csrf_token', $csrfToken, ['httponly' => false, 'samesite' => 'Lax']);
+        }
+        $this->assign('csrf_token', $csrfToken);
     }
 
     protected function label_comment()
