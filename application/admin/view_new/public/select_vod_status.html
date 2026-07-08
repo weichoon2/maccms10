@@ -1,0 +1,35 @@
+<form class="layui-form m10" method="post" action="{$url}">
+    <input type="hidden" name="col" value="{$col}">
+    <input type="hidden" name="ids" value="{$ids}">
+
+    <div class="layui-input-inline w150">
+        <select name="val" id="vod_status_val" lay-filter="vod_status_val">
+            <option value="">{:lang('select_opt')}</option>
+            <option value="0">{:lang('reviewed_not')}</option>
+            <option value="1">{:lang('reviewed')}</option>
+            <option value="2">{:lang('reviewed_reject')}</option>
+        </select>
+    </div>
+    <div class="layui-input-block mgt10" id="vod_audit_remark_row" style="display:none;">
+        <textarea name="remark" lay-verify="vod_reject_remark" class="layui-textarea" placeholder="{:lang('admin/vod_audit/remark_placeholder')}"></textarea>
+    </div>
+    <div class="layui-input-inline mgt10">
+        <button type="submit" class="layui-btn" lay-submit="" refresh="{$refresh}" lay-filter="formSubmit">{:lang('btn_save')}</button>
+    </div>
+</form>
+<script type="text/javascript">
+    layui.use(['form'], function () {
+        var form = layui.form;
+        form.verify({
+            vod_reject_remark: function (value) {
+                var status = document.getElementById('vod_status_val').value;
+                if (status === '2' && !value.trim()) {
+                    return '{:lang("admin/vod_audit/remark_required")}';
+                }
+            }
+        });
+        form.on('select(vod_status_val)', function (data) {
+            document.getElementById('vod_audit_remark_row').style.display = (data.value === '2') ? '' : 'none';
+        });
+    });
+</script>

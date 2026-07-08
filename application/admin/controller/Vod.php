@@ -1,5 +1,6 @@
 <?php
 namespace app\admin\controller;
+use app\common\util\VodAuditService;
 use think\Cache;
 use think\Db;
 
@@ -23,7 +24,7 @@ class Vod extends Base
         if(!empty($param['level'])){
             $where['vod_level'] = ['eq',$param['level']];
         }
-        if(in_array($param['status'],['0','1'])){
+        if(in_array($param['status'],['0','1','2'],true)){
             $where['vod_status'] = ['eq',$param['status']];
         }
         if(in_array($param['copyright'],['0','1'])){
@@ -221,6 +222,12 @@ class Vod extends Base
             if($param['ck_del']==3 && empty($param['downer'])){
                 return $this->error(lang('admin/vod/del_down_must_select_down'));
             }
+            if (!empty($param['ck_status']) && intval($param['val_status'] ?? -1) === VodAuditService::STATUS_REJECTED) {
+                $remarkErr = VodAuditService::rejectRemarkError($param['val_audit_remark'] ?? '');
+                if ($remarkErr !== '') {
+                    return $this->error($remarkErr);
+                }
+            }
             $where = $this->vodBatchFilterWhere($param);
             if($param['ck_del'] == 1){
                 $res = model('Vod')->recycleData($where);
@@ -271,7 +278,11 @@ class Vod extends Base
                 }
                 if(!empty($param['ck_status']) && isset($param['val_status'])){
                     $update['vod_status'] = $param['val_status'];
-                    $des .= '&nbsp;'.lang('status').'：'.($param['val_status'] ==1 ? '['.lang('reviewed').']':'['.lang('reviewed_not').']') .'；';
+                    $update['vod_audit_remark'] = '';
+                    if (intval($param['val_status']) === VodAuditService::STATUS_REJECTED) {
+                        $update['vod_audit_remark'] = mb_substr(trim((string)$param['val_audit_remark']), 0, 255);
+                    }
+                    $des .= '&nbsp;'.lang('status').'：['.VodAuditService::statusText($param['val_status']).']；';
                 }
                 if(!empty($param['ck_copyright']) && isset($param['val_copyright'])){
                     $update['vod_copyright'] = $param['val_copyright'];
@@ -373,6 +384,9 @@ class Vod extends Base
 
                 mac_echo($des);
                 $res2 = model('Vod')->where($where2)->update($update);
+                if ($res2 !== false && isset($update['vod_status'])) {
+                    \app\common\util\MeilisearchSync::afterVodSave((int)$v['vod_id']);
+                }
 
             }
             $param['page']++;
@@ -403,7 +417,7 @@ class Vod extends Base
         if (!empty($param['level'])) {
             $where['vod_level'] = ['eq', $param['level']];
         }
-        if (in_array($param['status'] ?? '', ['0', '1'])) {
+        if (in_array($param['status'] ?? '', ['0', '1', '2'])) {
             $where['vod_status'] = ['eq', $param['status']];
         }
         if (in_array($param['copyright'] ?? '', ['0', '1'])) {
@@ -507,6 +521,12 @@ class Vod extends Base
     {
         if (Request()->isPost()) {
             $param = input('post.');
+            if (intval($param['vod_status'] ?? 0) === VodAuditService::STATUS_REJECTED) {
+                $remarkErr = VodAuditService::rejectRemarkError($param['vod_audit_remark'] ?? '');
+                if ($remarkErr !== '') {
+                    return $this->error($remarkErr);
+                }
+            }
             $res = model('Vod')->saveData($param);
             if($res['code']>1){
                 return $this->error($res['msg']);
@@ -746,7 +766,21 @@ class Vod extends Base
             $where['vod_id'] = ['in',$ids];
             $update = [];
             if(empty($start)) {
-                $update[$col] = $val;
+                if ($col === 'vod_status') {
+                    $update[$col] = $val;
+                    $remark = trim((string)input('post.remark', input('get.remark', '')));
+                    if (intval($val) === VodAuditService::STATUS_REJECTED) {
+                        $remarkErr = VodAuditService::rejectRemarkError($remark);
+                        if ($remarkErr !== '') {
+                            return $this->error($remarkErr);
+                        }
+                        $update['vod_audit_remark'] = mb_substr($remark, 0, 255);
+                    } elseif (intval($val) === VodAuditService::STATUS_APPROVED) {
+                        $update['vod_audit_remark'] = '';
+                    }
+                } else {
+                    $update[$col] = $val;
+                }
                 if($col == 'type_id'){
                     $type_list = model('Type')->getCache();
                     $id1 = intval($type_list[$val]['type_pid']);
@@ -770,6 +804,57 @@ class Vod extends Base
             return $this->success($res['msg']);
         }
         return $this->error(lang('param_err'));
+    }
+
+    /**
+     * 批量改审核状态（view_new 专用弹层）
+     */
+    public function selectStatus()
+    {
+        $param = input();
+        $ids = $param['ids'] ?? '';
+        if (empty($ids)) {
+            return $this->error(lang('param_err'));
+        }
+        if (is_array($ids)) {
+            $ids = join(',', $ids);
+        }
+        $this->view->config('view_path', APP_PATH . 'admin/view_new/');
+        $this->assign('url', url('field'));
+        $this->assign('col', 'vod_status');
+        $this->assign('ids', $ids);
+        $this->assign('refresh', 'yes');
+        return $this->fetch('public/select_vod_status');
+    }
+
+    /**
+     * 批量审核：通过 / 驳回（可带驳回理由）
+     */
+    public function audit()
+    {
+        $param = input();
+        $ids = $param['ids'] ?? '';
+        $status = intval($param['status'] ?? -1);
+        if (empty($ids) || !in_array($status, [1, 2], true)) {
+            return $this->error(lang('param_err'));
+        }
+        $remark = mb_substr(trim((string)($param['remark'] ?? '')), 0, 255);
+        if ($status === VodAuditService::STATUS_REJECTED) {
+            $remarkErr = VodAuditService::rejectRemarkError($remark);
+            if ($remarkErr !== '') {
+                return $this->error($remarkErr);
+            }
+        }
+
+        $where = ['vod_id' => ['in', $ids]];
+        $update = ['vod_status' => $status];
+        $update['vod_audit_remark'] = $status === 2 ? $remark : '';
+
+        $res = model('Vod')->fieldData($where, $update);
+        if ($res['code'] > 1) {
+            return $this->error($res['msg']);
+        }
+        return $this->success($res['msg']);
     }
 
     public function updateToday()

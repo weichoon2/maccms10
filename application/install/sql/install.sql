@@ -829,6 +829,26 @@ CREATE TABLE `mac_vod_play_fail` (
 ) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8mb4 COMMENT='视频线路播放失败统计';
 
 -- ----------------------------
+-- Table structure for mac_vod_audit_rule
+-- ----------------------------
+DROP TABLE IF EXISTS `mac_vod_audit_rule`;
+CREATE TABLE `mac_vod_audit_rule` (
+  `rule_id` int(10) unsigned NOT NULL AUTO_INCREMENT,
+  `rule_name` varchar(100) NOT NULL DEFAULT '' COMMENT '规则名称',
+  `rule_type` varchar(20) NOT NULL DEFAULT 'title_keyword' COMMENT 'title_keyword|pic_empty|pic_invalid',
+  `rule_pattern` varchar(500) NOT NULL DEFAULT '' COMMENT '关键词(每行或|分隔)',
+  `rule_action` tinyint(1) unsigned NOT NULL DEFAULT '2' COMMENT '0待审 1通过 2驳回',
+  `rule_remark` varchar(255) NOT NULL DEFAULT '' COMMENT '命中时写入的审核备注',
+  `rule_status` tinyint(1) unsigned NOT NULL DEFAULT '1' COMMENT '0禁用 1启用',
+  `rule_sort` int(10) NOT NULL DEFAULT '0',
+  `rule_time_add` int(10) unsigned NOT NULL DEFAULT '0',
+  `rule_time` int(10) unsigned NOT NULL DEFAULT '0',
+  PRIMARY KEY (`rule_id`),
+  KEY `rule_status` (`rule_status`),
+  KEY `rule_sort` (`rule_sort`)
+) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8mb4 COMMENT='视频审核自动规则';
+
+-- ----------------------------
 -- Table structure for mac_user
 -- ----------------------------
 DROP TABLE IF EXISTS `mac_user`;
@@ -902,7 +922,8 @@ CREATE TABLE `mac_vod` (
   `vod_name` varchar(255) NOT NULL DEFAULT '' ,
   `vod_sub` varchar(255) NOT NULL DEFAULT '' ,
   `vod_en` varchar(255) NOT NULL DEFAULT '' ,
-  `vod_status` tinyint(1) unsigned NOT NULL DEFAULT '0' ,
+  `vod_status` tinyint(1) unsigned NOT NULL DEFAULT '0' COMMENT '0待审 1已审 2驳回',
+  `vod_audit_remark` varchar(255) NOT NULL DEFAULT '' COMMENT '审核备注(驳回理由)',
   `vod_letter` char(1) NOT NULL DEFAULT '' ,
   `vod_color` varchar(6) NOT NULL DEFAULT '' ,
   `vod_tag` varchar(100) NOT NULL DEFAULT '' ,

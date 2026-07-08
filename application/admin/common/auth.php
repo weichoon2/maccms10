@@ -918,6 +918,13 @@ return array (
         'controller' => 'vod',
         'action' => 'field',
       ),
+      4405 => 
+      array (
+        'show' => 0,
+        'name' => '--'.lang('menu/vod_audit_select_status'),
+        'controller' => 'vod',
+        'action' => 'selectStatus',
+      ),
       45 => 
       array (
         'show' => 1,
@@ -948,6 +955,49 @@ return array (
         'controller' => 'vod',
         'action' => 'data',
         'param' => 'status=0',
+      ),
+      483 => 
+      array (
+        'show' => 1,
+        'name' => lang('menu/vod_data_rejected'),
+        'controller' => 'vod',
+        'action' => 'data',
+        'param' => 'status=2',
+      ),
+      484 => 
+      array (
+        'show' => 1,
+        'name' => lang('menu/vod_audit_rule'),
+        'controller' => 'vodauditrule',
+        'action' => 'index',
+      ),
+      48401 => 
+      array (
+        'show' => 0,
+        'name' => '--'.lang('menu/vod_audit_rule_info'),
+        'controller' => 'vodauditrule',
+        'action' => 'info',
+      ),
+      48402 => 
+      array (
+        'show' => 0,
+        'name' => '--'.lang('menu/vod_audit_rule_del'),
+        'controller' => 'vodauditrule',
+        'action' => 'del',
+      ),
+      48403 => 
+      array (
+        'show' => 0,
+        'name' => '--'.lang('menu/vod_audit_rule_field'),
+        'controller' => 'vodauditrule',
+        'action' => 'field',
+      ),
+      4404 => 
+      array (
+        'show' => 0,
+        'name' => '--'.lang('menu/vod_audit_batch'),
+        'controller' => 'vod',
+        'action' => 'audit',
       ),
       481 => 
       array (

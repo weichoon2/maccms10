@@ -48,9 +48,13 @@
                     </div>
                     <div class="layui-input-inline w120">
                             <select name="vod_status">
-                                <option value="1" >{:lang('reviewed')}</option>
+                                <option value="1" {if condition="$info.vod_status eq '1'"}selected{/if}>{:lang('reviewed')}</option>
                                 <option value="0" {if condition="$info.vod_status eq '0'"}selected{/if}>{:lang('reviewed_not')}</option>
+                                <option value="2" {if condition="$info.vod_status eq '2'"}selected{/if}>{:lang('reviewed_reject')}</option>
                             </select>
+                    </div>
+                    <div class="layui-input-inline w200">
+                            <input type="text" name="vod_audit_remark" class="layui-input" value="{$info.vod_audit_remark|htmlspecialchars}" placeholder="{:lang('admin/vod_audit/remark_placeholder')}">
                     </div>
                     <div class="layui-input-inline w120">
                         <select name="vod_lock">

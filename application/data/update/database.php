@@ -714,3 +714,28 @@ if(empty($live_count)){
     $sql .= "(1,'CCTV-17 农业农村','cctv17','HD\$https://pili-live-hls.cntv.myqcloud.com/live/cctv17hd.m3u8','hls',1,104,0,0,'CCTV-17 农业农村频道 中央电视台官方直播');";
     $sql .= "\r";
 }
+
+// 视频审核：驳回理由字段（vod_status: 0待审 1已审 2驳回）
+if (!empty($col_list[$pre . 'vod']) && empty($col_list[$pre . 'vod']['vod_audit_remark'])) {
+    $sql .= "ALTER TABLE `{$pre}vod` ADD `vod_audit_remark` varchar(255) NOT NULL DEFAULT '' COMMENT '审核备注(驳回理由)' AFTER `vod_status`;";
+    $sql .= "\r";
+}
+// 视频审核自动规则表
+if (empty($col_list[$pre . 'vod_audit_rule'])) {
+    $sql .= "CREATE TABLE `{$pre}vod_audit_rule` (";
+    $sql .= "`rule_id` int(10) unsigned NOT NULL AUTO_INCREMENT,";
+    $sql .= "`rule_name` varchar(100) NOT NULL DEFAULT '' COMMENT '规则名称',";
+    $sql .= "`rule_type` varchar(20) NOT NULL DEFAULT 'title_keyword' COMMENT 'title_keyword|pic_empty|pic_invalid',";
+    $sql .= "`rule_pattern` varchar(500) NOT NULL DEFAULT '' COMMENT '关键词(每行或|分隔)',";
+    $sql .= "`rule_action` tinyint(1) unsigned NOT NULL DEFAULT '2' COMMENT '0待审 1通过 2驳回',";
+    $sql .= "`rule_remark` varchar(255) NOT NULL DEFAULT '' COMMENT '命中时写入的审核备注',";
+    $sql .= "`rule_status` tinyint(1) unsigned NOT NULL DEFAULT '1' COMMENT '0禁用 1启用',";
+    $sql .= "`rule_sort` int(10) NOT NULL DEFAULT '0',";
+    $sql .= "`rule_time_add` int(10) unsigned NOT NULL DEFAULT '0',";
+    $sql .= "`rule_time` int(10) unsigned NOT NULL DEFAULT '0',";
+    $sql .= "PRIMARY KEY (`rule_id`),";
+    $sql .= "KEY `rule_status` (`rule_status`),";
+    $sql .= "KEY `rule_sort` (`rule_sort`)";
+    $sql .= ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='视频审核自动规则';";
+    $sql .= "\r";
+}

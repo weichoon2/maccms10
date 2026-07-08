@@ -6,6 +6,7 @@ use app\common\util\Pinyin;
 use app\common\util\MeilisearchService;
 use app\common\util\MeilisearchListBridge;
 use app\common\util\MeilisearchSync;
+use app\common\util\VodAuditService;
 use app\common\validate\Vod as VodValidate;
 
 class Vod extends Base {
@@ -788,6 +789,8 @@ class Vod extends Base {
 
         $data = VodValidate::formatDataBeforeDb($data);
         $seoObjId = 0;
+        $isNew = empty($data['vod_id']);
+        VodAuditService::applyOnSave($data, $isNew);
         if(!empty($data['vod_id'])){
 
             $where=[];
@@ -923,11 +926,15 @@ class Vod extends Base {
         }
 
         $list = $this->field('vod_id,vod_name,vod_en')->where($where)->select();
+        $syncSearch = isset($update['vod_status']);
         foreach($list as $k=>$v){
             $key = 'vod_detail_'.$v['vod_id'];
             Cache::rm($key);
             $key = 'vod_detail_'.$v['vod_en'];
             Cache::rm($key);
+            if ($syncSearch) {
+                MeilisearchSync::afterVodSave((int)$v['vod_id']);
+            }
         }
 
         return ['code'=>1,'msg'=>lang('set_ok')];
