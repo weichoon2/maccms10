@@ -63,7 +63,8 @@ class ResourceHub extends Base
         if (!$this->validateRemoteUrl($url)) {
             return false;
         }
-        return mac_curl_get($url);
+        // 采集站等第三方源可能自签/过期/域名不匹配，显式关闭 TLS 校验以保兼容。
+        return mac_curl_get($url, [], '', false);
     }
 
     // ─── 云端资源站目录配置 ─────────────────────────────

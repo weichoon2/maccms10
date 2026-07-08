@@ -233,7 +233,7 @@ class Collection {
      * @param array $config  配置
      */
     protected static function get_html($url, &$config) {
-        if (!empty($url) && $html = mac_curl_get($url)) {
+        if (!empty($url) && $html = mac_curl_get($url, [], '', false)) {
             if ('UTF-8' != $config['sourcecharset'] && $config['sourcetype'] != 4) {
                 $html = iconv($config['sourcecharset'], 'UTF-8//TRANSLIT//IGNORE', $html);
             }

@@ -215,7 +215,7 @@ class Collect extends Base {
         if ($result['code'] > 1) {
             return $result;
         }
-        $html = mac_curl_get($url);
+        $html = mac_curl_get($url, [], '', false);
         if(empty($html)){
             return ['code'=>1001, 'msg'=>lang('model/collect/get_html_err') . ', url: ' . $url];
         }
@@ -364,7 +364,7 @@ class Collect extends Base {
         if ($result['code'] > 1) {
             return $result;
         }
-        $html = mac_curl_get($url);
+        $html = mac_curl_get($url, [], '', false);
         if(empty($html)){
             return ['code'=>1001, 'msg'=>lang('model/collect/get_html_err') . ', url: ' . $url];
         }
@@ -1302,7 +1302,7 @@ class Collect extends Base {
         if ($result['code'] > 1) {
             return $result;
         }
-        $html = mac_curl_get($url);
+        $html = mac_curl_get($url, [], '', false);
         if(empty($html)){
             return ['code'=>1001, 'msg'=>lang('model/collect/get_html_err') . ', url: ' . $url];
         }
@@ -1377,7 +1377,7 @@ class Collect extends Base {
         if ($result['code'] > 1) {
             return $result;
         }
-        $html = mac_curl_get($url);
+        $html = mac_curl_get($url, [], '', false);
         if(empty($html)){
             return ['code'=>1001, 'msg'=>lang('model/collect/get_html_err') . ', url: ' . $url];
         }
@@ -1711,7 +1711,7 @@ class Collect extends Base {
         if ($result['code'] > 1) {
             return $result;
         }
-        $html = mac_curl_get($url);
+        $html = mac_curl_get($url, [], '', false);
         if(empty($html)){
             return ['code'=>1001, 'msg'=>lang('model/collect/get_html_err') . ', url: ' . $url];
         }
@@ -2006,7 +2006,7 @@ class Collect extends Base {
         if ($result['code'] > 1) {
             return $result;
         }
-        $html = mac_curl_get($url);
+        $html = mac_curl_get($url, [], '', false);
         if(empty($html)){
             return ['code'=>1001, 'msg'=>lang('model/collect/get_html_err') . ', url: ' . $url];
         }
@@ -2308,7 +2308,7 @@ class Collect extends Base {
         if ($result['code'] > 1) {
             return $result;
         }
-        $html = mac_curl_get($url);
+        $html = mac_curl_get($url, [], '', false);
         if(empty($html)){
             return ['code'=>1001, 'msg'=>lang('model/collect/get_html_err') . ', url: ' . $url];
         }
@@ -2606,7 +2606,7 @@ class Collect extends Base {
         if ($result['code'] > 1) {
             return $result;
         }
-        $html = mac_curl_get($url);
+        $html = mac_curl_get($url, [], '', false);
         if(empty($html)){
             return ['code'=>1001, 'msg'=>lang('model/collect/get_html_err') . ', url: ' . $url];
         }
@@ -2894,7 +2894,7 @@ class Collect extends Base {
         if ($result['code'] > 1) {
             return $result;
         }
-        $html = mac_curl_get($url);
+        $html = mac_curl_get($url, [], '', false);
         if(empty($html)){
             return ['code'=>1001, 'msg'=>lang('model/collect/get_html_err') . ', url: ' . $url];
         }

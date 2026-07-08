@@ -29,6 +29,10 @@ class Update extends Base
         if(empty($file)){
             return $this->error(lang('param_err'));
         }
+        // 白名单：$file 经基址拼接为下载 URL，禁止路径/查询段注入。
+        if(!preg_match('/^[a-zA-Z0-9._-]+$/',$file)){
+            return $this->error(lang('param_err'));
+        }
         $version = config('version.code');
         $url = $this->_url .$file . '.zip?t='.time();
 
@@ -39,7 +43,12 @@ class Update extends Base
 
         $save_file = $version.'.zip';
         
-        $html = mac_curl_get($url);
+        $html = mac_curl_get($url, [], '', true);
+        if($html === false){
+            // TLS 校验失败或拉取失败：拒绝继续，防止 MITM 替换升级包（漏洞 7）。
+            echo lang('admin/update/download_err')."\n";
+            exit;
+        }
         @fwrite(@fopen($this->_save_path.$save_file,'wb'),$html);
         if(!is_file($this->_save_path.$save_file)){
             echo lang('admin/update/download_err')."\n";
@@ -52,9 +61,15 @@ class Update extends Base
             exit;
         }
 
-        // SHA1校验：.sha1文件进行比对防篡改
+        // SHA1校验：.sha1文件进行比对防篡改。经同一强制校验通道获取。
         $sha1_url = $this->_url . $file . '.zip.sha1?t=' . time();
-        $remote_sha1 = trim(mac_curl_get($sha1_url));
+        $remote_sha1_raw = mac_curl_get($sha1_url, [], '', true);
+        if($remote_sha1_raw === false){
+            @unlink($this->_save_path . $save_file);
+            echo lang('admin/update/sha1_err') . "\n";
+            exit;
+        }
+        $remote_sha1 = trim($remote_sha1_raw);
         $local_sha1 = sha1_file($this->_save_path . $save_file);
         if (empty($remote_sha1) || strpos($remote_sha1, $local_sha1) !== 0) {
             @unlink($this->_save_path . $save_file);

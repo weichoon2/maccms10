@@ -113,7 +113,8 @@ class SeoAi
             'Content-Type: application/json',
             'Authorization: Bearer ' . trim($ai['api_key']),
         ];
-        $respBody = mac_curl_post($url, json_encode($post, JSON_UNESCAPED_UNICODE), $headers);
+        // api_base 用户可配置指向自建网关/代理，可能自签证书，显式关闭校验以保兼容。
+        $respBody = mac_curl_post($url, json_encode($post, JSON_UNESCAPED_UNICODE), $headers, '', false);
         if ($respBody === false || $respBody === '') {
             return self::fallbackResult($payload, $provider, $model, 'empty ai response');
         }

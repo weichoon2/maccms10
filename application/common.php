@@ -671,7 +671,8 @@ function mac_check_back_link($url)
 
     $site_url = $GLOBALS['config']['site']['site_url'];
     $site_wapurl = $GLOBALS['config']['site']['site_wapurl'];
-    $html = mac_curl_get($url);
+    // 友链校验目标为用户填写的第三方站点，可能自签/过期/域名不匹配，显式关闭校验以保兼容。
+    $html = mac_curl_get($url, [], '', false);
     $msg = '';
     $code = 1;
 
@@ -839,7 +840,7 @@ function mac_page_param($record_total, $page_size, $page_current, $page_url,$pag
 }
 
 // CurlPOST数据提交-----------------------------------------
-function mac_curl_post($url,$data,$heads=array(),$cookie='')
+function mac_curl_post($url,$data,$heads=array(),$cookie='',$verify_ssl=true)
 {
     $ch = @curl_init();
     curl_setopt($ch, CURLOPT_USERAGENT, 'Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/45.0.2454.101 Safari/537.36');
@@ -850,8 +851,16 @@ function mac_curl_post($url,$data,$heads=array(),$cookie='')
     curl_setopt($ch, CURLOPT_TIMEOUT, 30);
     curl_setopt($ch, CURLOPT_HEADER,0);
     curl_setopt($ch, CURLOPT_REFERER, $url);
-    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, 0);
-    curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 2);
+    if($verify_ssl){
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, 1);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 2);
+        // 禁跟随重定向：防止 302 空空 host 校验 / DNS rebinding（纵深防御）。
+        curl_setopt($ch, CURLOPT_FOLLOWLOCATION, 0);
+    }
+    else{
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, 0);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 2);
+    }
 
     curl_setopt($ch, CURLOPT_POST, 1);
     curl_setopt($ch, CURLOPT_POSTFIELDS, $data);
@@ -862,14 +871,15 @@ function mac_curl_post($url,$data,$heads=array(),$cookie='')
         curl_setopt ($ch, CURLOPT_HTTPHEADER , $heads );
     }
     $response = @curl_exec($ch);
-    if(curl_errno($ch)){//出错则显示错误信息
-        //print curl_error($ch);
-    }
+    $errno = curl_errno($ch);
     curl_close($ch); //关闭curl链接
+    if($verify_ssl && $errno){
+        return false;
+    }
     return $response;//显示返回信息
 }
 // CurlPOST数据提交-----------------------------------------
-function mac_curl_get($url,$heads=array(),$cookie='')
+function mac_curl_get($url,$heads=array(),$cookie='',$verify_ssl=true)
 {
     $ch = @curl_init();
     curl_setopt($ch, CURLOPT_USERAGENT, 'Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/45.0.2454.101 Safari/537.36');
@@ -882,8 +892,19 @@ function mac_curl_get($url,$heads=array(),$cookie='')
     curl_setopt($ch, CURLOPT_HEADER,0);
     curl_setopt($ch, CURLOPT_REFERER, $url);
     curl_setopt($ch, CURLOPT_POST, 0);
-    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, 0);
-    curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 1);
+    if($verify_ssl){
+        // 强制对端 TLS 校验：阻断 MITM 替换升级包/校验值（漏洞 7）。
+        // CA 依赖 libcurl 系统默认（Debian/RedHat 均自带 /etc/ssl/certs/ca-certificates.crt）。
+        // 禁跟随重定向：防止 302 空空 host 校验 / DNS rebinding（纵深防御）。
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, 1);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 2);
+        curl_setopt($ch, CURLOPT_FOLLOWLOCATION, 0);
+    }
+    else{
+        // 默认分支保持原行为，兼容采集/插件商店等第三方源（证书可能自签/过期/域名不匹配）。
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, 0);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 1);
+    }
     if(!empty($cookie)){
         curl_setopt($ch, CURLOPT_COOKIE, $cookie);
     }
@@ -891,10 +912,12 @@ function mac_curl_get($url,$heads=array(),$cookie='')
         curl_setopt ($ch, CURLOPT_HTTPHEADER , $heads );
     }
     $response = @curl_exec($ch);
-    if(curl_errno($ch)){//出错则显示错误信息
-        //print curl_error($ch);die;
-    }
+    $errno = curl_errno($ch);
     curl_close($ch); //关闭curl链接
+    if($verify_ssl && $errno){
+        // 强制校验模式下 TLS 失败（对端不受信/被篡改）-> 显式失败，禁止继续升级流程。
+        return false;
+    }
     return $response;//显示返回信息
 }
 
