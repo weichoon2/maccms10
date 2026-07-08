@@ -2135,6 +2135,73 @@ function mac_url_img($url)
     return $url;
 }
 
+/**
+ * 读取「主题设计」（Theme Design）配置覆盖文件。
+ * 由后台「主题设计」工具发布，用于在不修改原始模板的前提下重新配置前台主题。
+ * - 预览模式（前台 URL ?td_preview=1）读取草稿版本 theme-design.draft.json，否则读取已发布版 theme-design.json。
+ * - 文件位于：ROOT_PATH . 'template/' . <当前模板目录> . '/theme-design[.draft].json'
+ * - 缺失/解析失败时返回空数组 []，保证前台与未配置时表现完全一致（向后兼容、绝不致命）。
+ * @return array
+ */
+function mac_theme_design()
+{
+    static $cache = [];
+
+    $preview = 0;
+    // request() 在某些上下文（如 CLI）可能不可用，做空安全处理
+    if (function_exists('request')) {
+        $req = request();
+        if (is_object($req)) {
+            $preview = !empty($req->param('td_preview')) ? 1 : 0;
+        }
+    }
+
+    $key = $preview ? 'draft' : 'pub';
+    if (isset($cache[$key])) {
+        return $cache[$key];
+    }
+
+    $data = [];
+    $tpl = isset($GLOBALS['config']['site']['template_dir']) ? $GLOBALS['config']['site']['template_dir'] : '';
+    if ($tpl !== '' && defined('ROOT_PATH')) {
+        $file = ROOT_PATH . 'template/' . $tpl . '/theme-design' . ($preview ? '.draft' : '') . '.json';
+        if (is_file($file)) {
+            $json = @file_get_contents($file);
+            if ($json !== false && $json !== '') {
+                $arr = json_decode($json, true);
+                if (is_array($arr)) {
+                    $data = $arr;
+                }
+            }
+        }
+    }
+
+    $cache[$key] = $data;
+    return $data;
+}
+
+/**
+ * 取首页某板块（section key）的设计属性，如 num / layout。
+ * 用于前台数据组件在渲染时按主题设计覆盖默认的「数量 / 展示方式」。
+ * 找不到返回空数组（组件即回退到自身默认）。
+ */
+function mac_td_section($key)
+{
+    static $map = null;
+    if ($map === null) {
+        $map = array();
+        $td = mac_theme_design();
+        if (!empty($td['homepage']['sections']) && is_array($td['homepage']['sections'])) {
+            foreach ($td['homepage']['sections'] as $s) {
+                if (!empty($s['key'])) {
+                    $map[$s['key']] = $s;
+                }
+            }
+        }
+    }
+    return isset($map[$key]) ? $map[$key] : array();
+}
+
 function mac_url_content_img($content)
 {
     $content = mac_scalar_string($content);

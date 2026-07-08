@@ -1570,6 +1570,118 @@ class System extends Base
         return $this->fetch('admin@system/configassistant');
     }
 
+    /**
+     * 主题AI 配置（主题设计「AI 生成」专用，独立于后台助手）。
+     * 写入 maccms.theme_ai：enabled / provider(openai|claude) / model / api_base / api_key / timeout / max_tokens。
+     * api_key 留空则保留原值（避免每次都要重填密钥）。
+     */
+    public function configthemeai()
+    {
+        if (Request()->isPost()) {
+            $post = input('post.', '', 'htmlentities');
+            $validate = \think\Loader::validate('Token');
+            if (!$validate->check($post)) {
+                $err = $validate->getError();
+                $msg = is_scalar($err) ? (string)$err : lang('param_err');
+                return $this->ajaxErrorWithFreshToken($msg);
+            }
+            unset($post['__token__']);
+
+            $config_old = config('maccms');
+            $ta = isset($post['theme_ai']) && is_array($post['theme_ai']) ? $post['theme_ai'] : [];
+            $sanitize = function ($v) {
+                return trim(strip_tags((string)$v));
+            };
+            $provider = strtolower($sanitize(isset($ta['provider']) ? $ta['provider'] : 'openai'));
+            if (!in_array($provider, ['openai', 'claude'], true)) {
+                $provider = 'openai';
+            }
+            $model = $sanitize(isset($ta['model']) ? $ta['model'] : '');
+            if ($model === '' || preg_match('/[<>{};]/', $model)) {
+                $model = 'claude-haiku-4-5-20251001';
+            }
+            $apiBase = $sanitize(isset($ta['api_base']) ? $ta['api_base'] : '');
+            $themeRow = [
+                'enabled' => isset($ta['enabled']) && (string)$ta['enabled'] === '1' ? '1' : '0',
+                'provider' => $provider,
+                'model' => $model,
+                'api_base' => $apiBase,
+                'timeout' => (string)max(10, min(300, intval(isset($ta['timeout']) ? $ta['timeout'] : 60))),
+                'max_tokens' => (string)max(500, min(8000, intval(isset($ta['max_tokens']) ? $ta['max_tokens'] : 2000))),
+            ];
+            $newKey = isset($ta['api_key']) ? trim((string)$ta['api_key']) : '';
+            if ($newKey !== '') {
+                $themeRow['api_key'] = $newKey;
+            } else {
+                $cfgFile = APP_PATH . 'extra/maccms.php';
+                $latest = is_file($cfgFile) ? include $cfgFile : [];
+                if (isset($latest['theme_ai']['api_key']) && $latest['theme_ai']['api_key'] !== '') {
+                    $themeRow['api_key'] = (string)$latest['theme_ai']['api_key'];
+                } else {
+                    $themeRow['api_key'] = isset($config_old['theme_ai']['api_key']) ? $config_old['theme_ai']['api_key'] : '';
+                }
+            }
+
+            // 图像生成（logo/头像）独立配置：端点 / 密钥 / 模型；留空则回退到上方文本端点
+            $themeRow['image_api_base'] = $sanitize(isset($ta['image_api_base']) ? $ta['image_api_base'] : '');
+            $imgModel = $sanitize(isset($ta['image_model']) ? $ta['image_model'] : '');
+            if (preg_match('/[<>{};]/', $imgModel)) {
+                $imgModel = '';
+            }
+            $themeRow['image_model'] = $imgModel;
+            $newImgKey = isset($ta['image_api_key']) ? trim((string)$ta['image_api_key']) : '';
+            if ($newImgKey !== '') {
+                $themeRow['image_api_key'] = $newImgKey;
+            } else {
+                $cfgFile2 = APP_PATH . 'extra/maccms.php';
+                $latest2 = is_file($cfgFile2) ? include $cfgFile2 : [];
+                if (isset($latest2['theme_ai']['image_api_key']) && $latest2['theme_ai']['image_api_key'] !== '') {
+                    $themeRow['image_api_key'] = (string)$latest2['theme_ai']['image_api_key'];
+                } else {
+                    $themeRow['image_api_key'] = isset($config_old['theme_ai']['image_api_key']) ? $config_old['theme_ai']['image_api_key'] : '';
+                }
+            }
+
+            $config_new = $config_old;
+            $config_new['theme_ai'] = $themeRow;
+            $res = mac_arr2file(APP_PATH . 'extra/maccms.php', $config_new);
+            if ($res === false) {
+                return $this->ajaxErrorWithFreshToken(lang('save_err'));
+            }
+            return $this->success(lang('save_ok'));
+        }
+
+        $config = config('maccms');
+        if (!isset($config['theme_ai']) || !is_array($config['theme_ai'])) {
+            $config['theme_ai'] = [];
+        }
+        $config['theme_ai'] = array_merge([
+            'enabled' => '1',
+            'provider' => 'openai',
+            'model' => 'claude-haiku-4-5-20251001',
+            'api_base' => 'https://newapi.westsecret.com/v1',
+            'api_key' => '',
+            'timeout' => '60',
+            'max_tokens' => '4000',
+            'image_api_base' => '',
+            'image_api_key' => '',
+            'image_model' => 'gpt-image-1',
+        ], $config['theme_ai']);
+        $taKey = isset($config['theme_ai']['api_key']) ? trim((string)$config['theme_ai']['api_key']) : '';
+        $this->assign('theme_ai_key_saved', $taKey !== '' ? 1 : 0);
+        $this->assign('theme_ai_key_tail', $taKey !== '' ? substr($taKey, -6) : '');
+        $imgKey = isset($config['theme_ai']['image_api_key']) ? trim((string)$config['theme_ai']['image_api_key']) : '';
+        $this->assign('theme_ai_img_key_saved', $imgKey !== '' ? 1 : 0);
+        $this->assign('theme_ai_img_key_tail', $imgKey !== '' ? substr($imgKey, -6) : '');
+        $this->assign('theme_ai_models', ['claude-opus-4-8', 'claude-opus-4-7', 'claude-opus-4-6', 'claude-sonnet-4-6', 'claude-haiku-4-5-20251001', 'claude-fable-5']);
+        $this->assign('theme_ai_image_models', ['gpt-image-1', 'dall-e-3']);
+        $this->assign('config', $config);
+        $this->assign('title', lang('menu/configthemeai'));
+        // 主题AI 配置页迁移到新版后台主题（view_new）；旧版 view/ 不再承载新功能（铁律 2）
+        $this->view->config('view_path', APP_PATH . 'admin/view_new/');
+        return $this->fetch('system/configthemeai');
+    }
+
     public function aisearchsync()
     {
         $post = input('post.', '', 'htmlentities');

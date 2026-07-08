@@ -170,6 +170,13 @@ return array (
         'controller' => 'system',
         'action' => 'configassistant',
       ),
+      218 =>
+      array (
+        'show' => 1,
+        'name' => lang('menu/configthemeai'),
+        'controller' => 'system',
+        'action' => 'configthemeai',
+      ),
 
       22 => 
       array (
@@ -1508,35 +1515,126 @@ return array (
         'controller' => 'template',
         'action' => 'wizard',
       ),
-      74 => 
+      74 =>
       array (
         'show' => 1,
         'name' => lang('menu/theme/config'),
         'controller' => 'tpl_config',
         'action' => 'theme',
       ),
-      75 => 
+      75 =>
+      array (
+        'show' => 1,
+        'name' => lang('menu/theme_design'),
+        'controller' => 'theme_design',
+        'action' => 'design',
+      ),
+      7501 =>
+      array (
+        'show' => 0,
+        'name' => '--主题设计入口',
+        'controller' => 'theme_design',
+        'action' => 'index',
+      ),
+      7502 =>
+      array (
+        'show' => 0,
+        'name' => '--主题设计加载',
+        'controller' => 'theme_design',
+        'action' => 'load',
+      ),
+      7503 =>
+      array (
+        'show' => 0,
+        'name' => '--主题设计保存草稿',
+        'controller' => 'theme_design',
+        'action' => 'save_step',
+      ),
+      7504 =>
+      array (
+        'show' => 0,
+        'name' => '--主题设计预览',
+        'controller' => 'theme_design',
+        'action' => 'preview',
+      ),
+      7505 =>
+      array (
+        'show' => 0,
+        'name' => '--主题设计发布',
+        'controller' => 'theme_design',
+        'action' => 'publish',
+      ),
+      7506 =>
+      array (
+        'show' => 0,
+        'name' => '--主题设计历史',
+        'controller' => 'theme_design',
+        'action' => 'history',
+      ),
+      7507 =>
+      array (
+        'show' => 0,
+        'name' => '--主题设计回滚',
+        'controller' => 'theme_design',
+        'action' => 'rollback',
+      ),
+      7508 =>
+      array (
+        'show' => 0,
+        'name' => '--主题设计上传',
+        'controller' => 'theme_design',
+        'action' => 'upload',
+      ),
+      7509 =>
+      array (
+        'show' => 0,
+        'name' => '--主题设计AI生成',
+        'controller' => 'theme_design',
+        'action' => 'generate',
+      ),
+      7510 =>
+      array (
+        'show' => 0,
+        'name' => '--主题设计AI探测',
+        'controller' => 'theme_design',
+        'action' => 'detect',
+      ),
+      7511 =>
+      array (
+        'show' => 0,
+        'name' => '--主题设计AI应用',
+        'controller' => 'theme_design',
+        'action' => 'generate_apply',
+      ),
+      7512 =>
+      array (
+        'show' => 0,
+        'name' => '--主题设计AI生成图片',
+        'controller' => 'theme_design',
+        'action' => 'gen_image',
+      ),
+      76 =>
       array (
         'show' => 1,
         'name' => lang('menu/template_market'),
         'controller' => 'template_market',
         'action' => 'index',
       ),
-      7501 => 
+      7601 =>
       array (
         'show' => 0,
         'name' => lang('admin/template_market/refresh_menu'),
         'controller' => 'template_market',
         'action' => 'refresh',
       ),
-      7502 => 
+      7602 =>
       array (
         'show' => 0,
         'name' => lang('admin/template_market/install_menu'),
         'controller' => 'template_market',
         'action' => 'install',
       ),
-      7503 => 
+      7603 =>
       array (
         'show' => 0,
         'name' => lang('admin/template_market/activate_menu'),
@@ -1545,7 +1643,7 @@ return array (
       ),
     ),
   ),
-  8 => 
+  8 =>
   array (
     'name' => lang('menu/make'),
     'icon' => 'xe63e',
