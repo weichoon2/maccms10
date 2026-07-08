@@ -1009,6 +1009,7 @@ class User extends Base
         $param = input();
         $where = [];
         $where['order_id'] = intval($param['order_id']);
+        $where['user_id'] = $GLOBALS['user']['user_id'];
         $res = model('Order')->infoData($where);
         if (request()->isAjax()) {
             return json($res);
