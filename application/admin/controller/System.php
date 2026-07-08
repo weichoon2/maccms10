@@ -1190,6 +1190,12 @@ class System extends Base
                 'rate_limit_window' => (string)max(10, min(3600, intval(isset($ai['rate_limit_window']) ? $ai['rate_limit_window'] : 60))),
                 'rate_limit_max' => (string)max(1, min(500, intval(isset($ai['rate_limit_max']) ? $ai['rate_limit_max'] : 20))),
                 'max_question_chars' => (string)max(0, min(8000, intval(isset($ai['max_question_chars']) ? $ai['max_question_chars'] : 800))),
+                'require_login' => isset($ai['require_login']) && (string)$ai['require_login'] === '1' ? '1' : '0',
+                'anon_captcha_after' => (string)max(0, min(500, intval(isset($ai['anon_captcha_after']) ? $ai['anon_captcha_after'] : 10))),
+                'daily_budget' => (string)max(0, min(100000, intval(isset($ai['daily_budget']) ? $ai['daily_budget'] : 500))),
+                'llm_call_cap' => (string)max(1, min(10, intval(isset($ai['llm_call_cap']) ? $ai['llm_call_cap'] : 3))),
+                'circuit_fail_threshold' => (string)max(1, min(100, intval(isset($ai['circuit_fail_threshold']) ? $ai['circuit_fail_threshold'] : 8))),
+                'circuit_hold_seconds' => (string)max(30, min(86400, intval(isset($ai['circuit_hold_seconds']) ? $ai['circuit_hold_seconds'] : 1800))),
                 'module' => [
                     'vod' => isset($module['vod']) && (string)$module['vod'] === '1' ? '1' : '0',
                     'art' => isset($module['art']) && (string)$module['art'] === '1' ? '1' : '0',
@@ -1312,6 +1318,8 @@ class System extends Base
 
             $config_new = $config_old;
             $config_new['ai_search'] = $row;
+            $trustedProxies = isset($post['trusted_proxies']) ? trim((string)$post['trusted_proxies']) : '';
+            $config_new['trusted_proxies'] = $trustedProxies;
 
             $res = mac_arr2file(APP_PATH . 'extra/maccms.php', $config_new);
             if ($res === false) {
@@ -1344,6 +1352,12 @@ class System extends Base
                 'rate_limit_window' => '60',
                 'rate_limit_max' => '20',
                 'max_question_chars' => '800',
+                'require_login' => '1',
+                'anon_captcha_after' => '10',
+                'daily_budget' => '500',
+                'llm_call_cap' => '3',
+                'circuit_fail_threshold' => '8',
+                'circuit_hold_seconds' => '1800',
                 'module' => [
                     'vod' => '1',
                     'art' => '1',
@@ -1394,12 +1408,22 @@ class System extends Base
             ];
         }
 
+        if (!isset($config['trusted_proxies'])) {
+            $config['trusted_proxies'] = '';
+        }
+
         $aiSearchFill = [
             'response_language' => 'auto',
             'rate_limit_enabled' => '1',
             'rate_limit_window' => '60',
             'rate_limit_max' => '20',
             'max_question_chars' => '800',
+            'require_login' => '1',
+            'anon_captcha_after' => '10',
+            'daily_budget' => '500',
+            'llm_call_cap' => '3',
+            'circuit_fail_threshold' => '8',
+            'circuit_hold_seconds' => '1800',
             'anilist_enabled' => '0',
             'google_books_enabled' => '0',
             'google_books_api_key' => '',

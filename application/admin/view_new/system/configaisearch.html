@@ -187,6 +187,51 @@
             </div>
         </div>
 
+        <div class="layui-form-item layui-form-text">
+            <blockquote class="layui-elem-quote layui-quote-nm">{:lang('admin/system/configaisearch/abuse_tip')}</blockquote>
+        </div>
+
+        <div class="layui-form-item">
+            <label class="layui-form-label">{:lang('admin/system/configaisearch/require_login')}：</label>
+            <div class="layui-input-block">
+                <input type="radio" name="ai_search[require_login]" value="1" title="{:lang('open')}" {if condition="$config['ai_search']['require_login'] eq '1'"}checked{/if}>
+                <input type="radio" name="ai_search[require_login]" value="0" title="{:lang('close')}" {if condition="$config['ai_search']['require_login'] neq '1'"}checked{/if}>
+            </div>
+        </div>
+
+        <div class="layui-form-item">
+            <label class="layui-form-label">{:lang('admin/system/configaisearch/anon_captcha_after')}：</label>
+            <div class="layui-input-inline w150">
+                <input type="number" name="ai_search[anon_captcha_after]" value="{$config['ai_search']['anon_captcha_after']|default='10'}" class="layui-input" min="0" max="500">
+            </div>
+            <label class="layui-form-label">{:lang('admin/system/configaisearch/daily_budget')}：</label>
+            <div class="layui-input-inline w150">
+                <input type="number" name="ai_search[daily_budget]" value="{$config['ai_search']['daily_budget']|default='500'}" class="layui-input" min="0" max="100000">
+            </div>
+            <label class="layui-form-label">{:lang('admin/system/configaisearch/llm_call_cap')}：</label>
+            <div class="layui-input-inline w150">
+                <input type="number" name="ai_search[llm_call_cap]" value="{$config['ai_search']['llm_call_cap']|default='3'}" class="layui-input" min="1" max="10">
+            </div>
+        </div>
+
+        <div class="layui-form-item">
+            <label class="layui-form-label">{:lang('admin/system/configaisearch/circuit_fail_threshold')}：</label>
+            <div class="layui-input-inline w150">
+                <input type="number" name="ai_search[circuit_fail_threshold]" value="{$config['ai_search']['circuit_fail_threshold']|default='8'}" class="layui-input" min="1" max="100">
+            </div>
+            <label class="layui-form-label">{:lang('admin/system/configaisearch/circuit_hold_seconds')}：</label>
+            <div class="layui-input-inline w150">
+                <input type="number" name="ai_search[circuit_hold_seconds]" value="{$config['ai_search']['circuit_hold_seconds']|default='1800'}" class="layui-input" min="30" max="86400">
+            </div>
+        </div>
+
+        <div class="layui-form-item">
+            <label class="layui-form-label">{:lang('admin/system/configaisearch/trusted_proxies')}：</label>
+            <div class="layui-input-block">
+                <input type="text" name="trusted_proxies" value="{$config['trusted_proxies']|default=''}" class="layui-input" placeholder="127.0.0.1,172.16.0.0/12">
+            </div>
+        </div>
+
         <div class="layui-form-item">
             <label class="layui-form-label">{:lang('admin/system/configaisearch/debug_log')}：</label>
             <div class="layui-input-block">

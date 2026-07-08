@@ -939,7 +939,7 @@ class Ajax extends Base
     public function verify_check()
     {
         $param = input();
-        if(!in_array($param['type'],['search','show'])){
+        if(!in_array($param['type'],['search','show','ai_chat'])){
             return ['code' => 1001, 'msg' => lang('param_err')];
         }
 
@@ -947,6 +947,12 @@ class Ajax extends Base
             return ['code' => 1002, 'msg' => lang('verify_err')];
         }
         session($param['type'].'_verify','1');
+        if ($param['type'] === 'ai_chat') {
+            $sid = (string)session_id();
+            if ($sid !== '') {
+                \app\common\util\AiChatRateLimit::resetSession($sid);
+            }
+        }
         return json(['code'=>1,'msg'=>lang('ok')]);
     }
 
@@ -1000,6 +1006,56 @@ class Ajax extends Base
                 'code' => 429,
                 'msg' => 'Too many requests. Please try again in '.$retry.' seconds.',
                 'data' => array_merge($service->emptyPayload(), ['retry_after' => $retry])
+            ]);
+        }
+
+        // --- Auth gate: default require_login; anonymous captcha when allowed ---
+        $requireLogin = (string)(isset($aiCfg['require_login']) ? $aiCfg['require_login'] : '1');
+        $userId = intval(session('user_id'));
+        $isAnon = ($userId <= 0);
+        if ($requireLogin === '1' && $isAnon) {
+            return json([
+                'code' => 1003,
+                'msg' => lang('index/n'),
+                'data' => $service->emptyPayload()
+            ]);
+        }
+        if ($isAnon) {
+            $anonAfter = intval(isset($aiCfg['anon_captcha_after']) ? $aiCfg['anon_captcha_after'] : 10);
+            if ($anonAfter > 0) {
+                $sessCheck = AiChatRateLimit::checkSession((string)session_id(), $aiCfg);
+                if (!$sessCheck['allowed']) {
+                    $verified = (string)session('ai_chat_verify');
+                    if ($verified !== '1') {
+                        return json([
+                            'code' => 1004,
+                            'msg' => lang('index/ai_chat_captcha_required'),
+                            'data' => array_merge($service->emptyPayload(), ['captcha_required' => true, 'retry_after' => max(1, intval($sessCheck['retry_after']))])
+                        ]);
+                    }
+                }
+            }
+        }
+
+        // --- Global daily budget (IP-agnostic) ---
+        $budget = AiChatRateLimit::checkDailyBudget($aiCfg);
+        if (!$budget['allowed']) {
+            header('HTTP/1.1 503 Service Unavailable');
+            return json([
+                'code' => 5031,
+                'msg' => lang('index/ai_chat_daily_exceeded'),
+                'data' => array_merge($service->emptyPayload(), ['daily_exceeded' => true, 'used' => intval($budget['used']), 'limit' => intval($budget['limit'])])
+            ]);
+        }
+
+        // --- Circuit breaker ---
+        $circuit = AiChatRateLimit::checkCircuit($aiCfg);
+        if (!$circuit['closed']) {
+            header('HTTP/1.1 503 Service Unavailable');
+            return json([
+                'code' => 5032,
+                'msg' => lang('index/ai_chat_circuit_open'),
+                'data' => array_merge($service->emptyPayload(), ['circuit_open' => true])
             ]);
         }
 

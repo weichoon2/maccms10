@@ -765,3 +765,41 @@ if (empty($col_list[$pre . 'vod_audit_rule'])) {
     $sql .= ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='视频审核自动规则';";
     $sql .= "\r";
 }
+
+// AI 搜索反滥用配置注入（漏洞 12）：require_login / anon_captcha_after /
+// daily_budget / llm_call_cap / circuit_fail_threshold / circuit_hold_seconds，
+// 以及顶层 trusted_proxies。幂等：只补缺失键，不覆盖站长已设值。
+{
+    $file = APP_PATH . 'extra/maccms.php';
+    if (is_file($file)) {
+        @chmod($file, 0777);
+        $config = config('maccms');
+        if (is_array($config)) {
+            $changed = false;
+            if (!isset($config['ai_search']) || !is_array($config['ai_search'])) {
+                $config['ai_search'] = [];
+            }
+            $aiFill = [
+                'require_login' => '1',
+                'anon_captcha_after' => '10',
+                'daily_budget' => '500',
+                'llm_call_cap' => '3',
+                'circuit_fail_threshold' => '8',
+                'circuit_hold_seconds' => '1800',
+            ];
+            foreach ($aiFill as $k => $v) {
+                if (!isset($config['ai_search'][$k])) {
+                    $config['ai_search'][$k] = $v;
+                    $changed = true;
+                }
+            }
+            if (!isset($config['trusted_proxies'])) {
+                $config['trusted_proxies'] = '';
+                $changed = true;
+            }
+            if ($changed) {
+                mac_arr2file($file, $config);
+            }
+        }
+    }
+}

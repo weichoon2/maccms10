@@ -1356,36 +1356,130 @@ function mac_get_client_ip()
     if (!is_null($final)) {
         return $final;
     }
-    $ips = [];
-    if (!empty($_SERVER['HTTP_CF_CONNECTING_IP'])) {
-        $ips[] = $_SERVER['HTTP_CF_CONNECTING_IP'];
-    }
-    if (!empty($_SERVER['HTTP_ALI_CDN_REAL_IP'])) {
-        $ips[] = $_SERVER['HTTP_ALI_CDN_REAL_IP'];
-    }
-    if (!empty($_SERVER['HTTP_CLIENT_IP'])) {
-        $ips[] = $_SERVER['HTTP_CLIENT_IP'];
-    }
-    if (!empty($_SERVER['HTTP_PROXY_USER'])) {
-        $ips[] = $_SERVER['HTTP_PROXY_USER'];
-    }
-    $real_ip = getenv('HTTP_X_REAL_IP');
-    if (!empty($real_ip)) {
-        $ips[] = $real_ip;
-    }
-    if (!empty($_SERVER['REMOTE_ADDR'])) {
-        $ips[] = $_SERVER['REMOTE_ADDR'];
-    }
-    // 选第一个最合法的，或最后一个正常的IP
-    foreach ($ips as $ip) {
-        $verifyResult = filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_RES_RANGE);
-        if (!$verifyResult){
-            continue;
+    $final = '0.0.0.0';
+
+    $remoteAddr = isset($_SERVER['REMOTE_ADDR']) ? (string)$_SERVER['REMOTE_ADDR'] : '';
+
+    $trustedProxies = [];
+    $tpCfg = config('maccms.trusted_proxies');
+    if (is_string($tpCfg)) {
+        $tpCfg = trim($tpCfg);
+        if ($tpCfg !== '') {
+            foreach (explode(',', $tpCfg) as $p) {
+                $p = trim($p);
+                if ($p !== '') {
+                    $trustedProxies[] = $p;
+                }
+            }
         }
-        $verifyResult && $final = $ip;
+    } elseif (is_array($tpCfg)) {
+        foreach ($tpCfg as $p) {
+            $p = trim((string)$p);
+            if ($p !== '') {
+                $trustedProxies[] = $p;
+            }
+        }
     }
-    empty($final) && $final = '0.0.0.0';
+
+    $isTrustedProxy = false;
+    if ($remoteAddr !== '' && !empty($trustedProxies)) {
+        foreach ($trustedProxies as $proxy) {
+            if (mac_ip_in_cidr($remoteAddr, $proxy)) {
+                $isTrustedProxy = true;
+                break;
+            }
+        }
+    }
+
+    if ($isTrustedProxy) {
+        $headerCandidates = [
+            'HTTP_CF_CONNECTING_IP',
+            'HTTP_ALI_CDN_REAL_IP',
+            'HTTP_X_REAL_IP',
+            'HTTP_CLIENT_IP',
+            'HTTP_PROXY_USER',
+        ];
+        foreach ($headerCandidates as $key) {
+            $val = isset($_SERVER[$key]) ? trim((string)$_SERVER[$key]) : '';
+            if ($key === 'HTTP_X_REAL_IP' && $val === '') {
+                $val = trim((string)getenv('HTTP_X_REAL_IP'));
+            }
+            if ($val === '') {
+                continue;
+            }
+            if (filter_var($val, FILTER_VALIDATE_IP) !== false) {
+                $final = $val;
+                return $final;
+            }
+            if (strpos($val, ',') !== false) {
+                foreach (explode(',', $val) as $candidate) {
+                    $candidate = trim($candidate);
+                    if ($candidate !== '' && filter_var($candidate, FILTER_VALIDATE_IP) !== false) {
+                        $final = $candidate;
+                        return $final;
+                    }
+                }
+            }
+        }
+    }
+
+    if ($remoteAddr !== '' && filter_var($remoteAddr, FILTER_VALIDATE_IP) !== false) {
+        $final = $remoteAddr;
+    }
+
     return $final;
+}
+
+/**
+ * 判断 IP 是否落在给定的信任代理条目内。条目可以是精确 IP（IPv4/IPv6）
+ * 或 CIDR 网段（如 172.16.0.0/12、2001:db8::/32）。兼容 PHP 7.0。
+ *
+ * @param string $ip    待判定的 IP
+ * @param string $range 精确 IP 或 CIDR
+ * @return bool
+ */
+function mac_ip_in_cidr($ip, $range)
+{
+    $ip = trim((string)$ip);
+    $range = trim((string)$range);
+    if ($ip === '' || $range === '') {
+        return false;
+    }
+    // 无掩码：按精确 IP 比较
+    if (strpos($range, '/') === false) {
+        return $ip === $range;
+    }
+
+    $parts = explode('/', $range, 2);
+    $subnet = trim($parts[0]);
+    $bits = isset($parts[1]) ? (int)trim($parts[1]) : -1;
+
+    $ipBin = @inet_pton($ip);
+    $subnetBin = @inet_pton($subnet);
+    // inet_pton 失败或不同协议族（二进制长度不同）直接判否
+    if ($ipBin === false || $subnetBin === false || strlen($ipBin) !== strlen($subnetBin)) {
+        return false;
+    }
+    $maxBits = strlen($ipBin) * 8;
+    if ($bits < 0 || $bits > $maxBits) {
+        return false;
+    }
+    if ($bits === 0) {
+        return true;
+    }
+
+    $bytes = intdiv($bits, 8);
+    $remainder = $bits % 8;
+    if ($bytes > 0 && strncmp($ipBin, $subnetBin, $bytes) !== 0) {
+        return false;
+    }
+    if ($remainder > 0) {
+        $mask = chr((0xFF << (8 - $remainder)) & 0xFF);
+        if ((ord($ipBin[$bytes]) & ord($mask)) !== (ord($subnetBin[$bytes]) & ord($mask))) {
+            return false;
+        }
+    }
+    return true;
 }
 
 function mac_get_ip_long($ip_addr = '')

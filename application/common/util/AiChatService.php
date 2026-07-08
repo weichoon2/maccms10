@@ -5,8 +5,76 @@ use think\Db;
 
 class AiChatService
 {
+    /** @var int Number of billable LLM HTTP calls made during this request. */
+    private $llmCallCount = 0;
+
+    /** @var int|null Configured cap on billable LLM calls per request. */
+    private $llmCallCap = null;
+
+    /** @var array ai_search config snapshot, lazily loaded. */
+    private $aiCfg;
+
+    /**
+     * Guard a billable LLM HTTP call. Returns true if the call may proceed
+     * (under the per-request cap), false if the cap has been reached.
+     * On success this also consumes a slot (increments the counter).
+     *
+     * @return bool
+     */
+    private function allowLlmCall()
+    {
+        if ($this->llmCallCap === null) {
+            $cfg = $this->aiCfg();
+            $cap = intval(isset($cfg['llm_call_cap']) ? $cfg['llm_call_cap'] : 3);
+            $this->llmCallCap = $cap > 0 ? $cap : 3;
+        }
+        if ($this->llmCallCount >= $this->llmCallCap) {
+            return false;
+        }
+        $this->llmCallCount++;
+        return true;
+    }
+
+    /**
+     * Wrap a billable LLM HTTP call: enforce the per-request cap, count the
+     * attempt, record success/failure to the circuit breaker, and return the
+     * parsed result (or '' / null / [] on cap-rejection or failure).
+     *
+     * @param callable $fn  performs the HTTP request, returns string|false
+     * @param string    $kind 'chat' | 'embedding'
+     * @return string|false raw response body, or false if rejected/failed
+     */
+    private function guardedLlmCall($fn, $kind = 'chat')
+    {
+        if (!$this->allowLlmCall()) {
+            return false;
+        }
+        $resp = false;
+        try {
+            $resp = call_user_func($fn);
+        } catch (\Throwable $e) {
+            $resp = false;
+        }
+        $ok = ($resp !== false && $resp !== '');
+        AiChatRateLimit::recordLlmCall($ok, $this->aiCfg());
+        return $ok ? $resp : false;
+    }
+
+    private function aiCfg()
+    {
+        if ($this->aiCfg === null) {
+            $cfg = config('maccms.ai_search');
+            $this->aiCfg = is_array($cfg) ? $cfg : [];
+        }
+        return $this->aiCfg;
+    }
+
     public function buildPayload($question, $mid, $limit)
     {
+        AiSearch::setLlmGate(
+            function () { return $this->allowLlmCall(); },
+            function ($ok) { AiChatRateLimit::recordLlmCall($ok, $this->aiCfg()); }
+        );
         $responseLang = $this->resolveResponseLanguage($question);
         $moduleMap = [1=>'vod',2=>'art',3=>'topic',8=>'actor',9=>'role',11=>'website',12=>'plot',13=>'manga'];
         $module = ($mid === 0) ? 'mixed' : (isset($moduleMap[$mid]) ? $moduleMap[$mid] : 'mixed');
@@ -14,13 +82,10 @@ class AiChatService
 
         if ($mid === 0) {
             try {
-                $searchMeta = $this->mergeSearchMetaPayloads(
-                    $this->mergeSearchMetaPayloads(
-                        AiSearch::buildForSearch('vod', ['wd' => $question]),
-                        AiSearch::buildForSearch('art', ['wd' => $question])
-                    ),
-                    AiSearch::buildForSearch('manga', ['wd' => $question])
-                );
+                $searchMeta = AiSearch::buildForSearchMixed(['wd' => $question]);
+                if (!isset($searchMeta['expanded_terms'])) {
+                    $searchMeta = ['expanded_terms' => [], 'external_resources' => [], 'query_merged' => ''];
+                }
             } catch (\Throwable $e) {
                 $searchMeta = ['expanded_terms' => [], 'external_resources' => [], 'query_merged' => ''];
             }
@@ -76,39 +141,6 @@ class AiChatService
             'suggestions' => [],
             'trace_id' => '',
         ];
-    }
-
-    private function mergeSearchMetaPayloads(array $a, array $b)
-    {
-        $terms = [];
-        if (!empty($a['expanded_terms']) && is_array($a['expanded_terms'])) {
-            $terms = array_merge($terms, $a['expanded_terms']);
-        }
-        if (!empty($b['expanded_terms']) && is_array($b['expanded_terms'])) {
-            $terms = array_merge($terms, $b['expanded_terms']);
-        }
-        $terms = array_values(array_unique(array_filter(array_map(function ($t) {
-            return trim((string)$t);
-        }, $terms))));
-        $terms = array_slice($terms, 0, 8);
-
-        $external = [];
-        if (!empty($a['external_resources']) && is_array($a['external_resources'])) {
-            $external = array_merge($external, $a['external_resources']);
-        }
-        if (!empty($b['external_resources']) && is_array($b['external_resources'])) {
-            $external = array_merge($external, $b['external_resources']);
-        }
-
-        $qm = '';
-        foreach ([$a, $b] as $p) {
-            $q = isset($p['query_merged']) ? trim((string)$p['query_merged']) : '';
-            if ($q !== '' && mb_strlen($q, 'UTF-8') > mb_strlen($qm, 'UTF-8')) {
-                $qm = $q;
-            }
-        }
-
-        return ['expanded_terms' => $terms, 'external_resources' => $external, 'query_merged' => $qm];
     }
 
     private function buildCards($question, $mid, $limit, array $searchMeta)
@@ -379,12 +411,14 @@ class AiChatService
         $timeout = max(3, intval(isset($cfg['timeout']) ? $cfg['timeout'] : 12));
         $post = ['model' => $model, 'input' => $inputs];
         $headers = ['Content-Type: application/json', 'Authorization: Bearer '.$apiKey];
-        $respBody = HttpClient::curlPostWithTimeout(
-            $apiBase.'/embeddings',
-            json_encode($post, JSON_UNESCAPED_UNICODE),
-            $headers,
-            $timeout
-        );
+        $respBody = $this->guardedLlmCall(function () use ($apiBase, $post, $headers, $timeout) {
+            return HttpClient::curlPostWithTimeout(
+                $apiBase.'/embeddings',
+                json_encode($post, JSON_UNESCAPED_UNICODE),
+                $headers,
+                $timeout
+            );
+        }, 'embedding');
         if ($respBody === false || $respBody === '') {
             return null;
         }
@@ -683,12 +717,14 @@ class AiChatService
             'messages' => $messages,
         ];
         $headers = ['Content-Type: application/json', 'Authorization: Bearer '.$apiKey];
-        $respBody = HttpClient::curlPostWithTimeout(
-            $apiBase.'/chat/completions',
-            json_encode($post, JSON_UNESCAPED_UNICODE),
-            $headers,
-            $timeout
-        );
+        $respBody = $this->guardedLlmCall(function () use ($apiBase, $post, $headers, $timeout) {
+            return HttpClient::curlPostWithTimeout(
+                $apiBase.'/chat/completions',
+                json_encode($post, JSON_UNESCAPED_UNICODE),
+                $headers,
+                $timeout
+            );
+        }, 'chat');
         if ($respBody === false || $respBody === '') {
             return '';
         }
@@ -987,12 +1023,14 @@ class AiChatService
             ],
         ];
         $headers = ['Content-Type: application/json', 'Authorization: Bearer '.$apiKey];
-        $respBody = HttpClient::curlPostWithTimeout(
-            $apiBase.'/chat/completions',
-            json_encode($post, JSON_UNESCAPED_UNICODE),
-            $headers,
-            $timeout
-        );
+        $respBody = $this->guardedLlmCall(function () use ($apiBase, $post, $headers, $timeout) {
+            return HttpClient::curlPostWithTimeout(
+                $apiBase.'/chat/completions',
+                json_encode($post, JSON_UNESCAPED_UNICODE),
+                $headers,
+                $timeout
+            );
+        }, 'chat');
         if ($respBody === false || $respBody === '') {
             return [];
         }

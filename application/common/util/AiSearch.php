@@ -90,6 +90,95 @@ class AiSearch
     /** @var array<string, array> 单次请求内相同 module+wd 只构建一次，避免 AI 聊天等场景重复 expand / Meili */
     private static $buildForSearchMemo = [];
 
+    /** @var callable|null gate callback returning bool (allowed) for billable LLM calls */
+    private static $llmGate = null;
+
+    /** @var callable|null recorder callback(bool $ok) for LLM call results */
+    private static $llmRecorder = null;
+
+    /**
+     * Install a billable-LLM-call gate + recorder so that term expansion
+     * performed inside AiSearch is counted against the same per-request cap
+     * and circuit breaker as AiChatService's direct calls.
+     *
+     * @param callable|null $gate     returns bool (true = allowed)
+     * @param callable|null $recorder accepts bool $ok
+     */
+    public static function setLlmGate($gate, $recorder)
+    {
+        self::$llmGate = is_callable($gate) ? $gate : null;
+        self::$llmRecorder = is_callable($recorder) ? $recorder : null;
+    }
+
+    /**
+     * Mixed-mode (mid=0) search: run a single LLM term expansion (treated as
+     * the vod module for enabled/length checks) and reuse the resulting terms
+     * across vod/art/manga DB/Meili lookups. This avoids one expandTerms call
+     * per module (3 independent LLM requests) on the anonymous AI chat path.
+     *
+     * @param array $param
+     * @return array
+     */
+    public static function buildForSearchMixed(array $param = [])
+    {
+        $cfg = self::getConfig();
+        $wd = trim((string)(isset($param['wd']) ? $param['wd'] : ''));
+        if ($wd === '') {
+            return self::emptyPayload($wd);
+        }
+        if ((string)$cfg['enabled'] !== '1') {
+            return self::emptyPayload($wd);
+        }
+        $memoKey = 'mixed' . "\x1e" . mb_strtolower($wd, 'UTF-8');
+        if (isset(self::$buildForSearchMemo[$memoKey])) {
+            return self::$buildForSearchMemo[$memoKey];
+        }
+
+        $expansion = [];
+        if (mb_strlen($wd, 'UTF-8') >= intval($cfg['min_query_len']) && self::isEnabled($cfg, 'vod')) {
+            $expansion = self::expandTerms($cfg, 'vod', $wd);
+        }
+        $queryMerged = self::mergeQuery($wd, $expansion);
+        $kw = '%' . addcslashes($wd, '%_') . '%';
+
+        $internal = [];
+        if (self::isEnabled($cfg, 'vod')) {
+            $vodRows = self::queryVodResources($kw, $queryMerged);
+            if (is_array($vodRows)) {
+                foreach ($vodRows as $row) {
+                    $internal[] = $row;
+                }
+            }
+        }
+        if (self::isEnabled($cfg, 'art')) {
+            $artRows = self::queryArtResources($kw, $queryMerged);
+            if (is_array($artRows)) {
+                foreach ($artRows as $row) {
+                    $internal[] = $row;
+                }
+            }
+        }
+        if (self::isEnabled($cfg, 'manga')) {
+            $mangaRows = self::queryMangaResources($kw, $queryMerged);
+            if (is_array($mangaRows)) {
+                foreach ($mangaRows as $row) {
+                    $internal[] = $row;
+                }
+            }
+        }
+
+        $out = [
+            'enabled' => true,
+            'query_original' => $wd,
+            'query_merged' => $queryMerged,
+            'expanded_terms' => $expansion,
+            'internal_resources' => $internal,
+            'external_resources' => [],
+        ];
+        self::$buildForSearchMemo[$memoKey] = $out;
+        return $out;
+    }
+
     public static function buildForSearch($module, array $param = [])
     {
         $cfg = self::getConfig();
@@ -238,7 +327,14 @@ class AiSearch
             'Content-Type: application/json',
             'Authorization: Bearer ' . $apiKey,
         ];
+        if (self::$llmGate !== null && !call_user_func(self::$llmGate)) {
+            self::debugLog($cfg, 'ai_search expand blocked by llm call cap');
+            return [];
+        }
         $respBody = HttpClient::curlPostWithTimeout($url, json_encode($post, JSON_UNESCAPED_UNICODE), $headers, max(3, intval($cfg['timeout'])));
+        if (self::$llmRecorder !== null) {
+            call_user_func(self::$llmRecorder, $respBody !== false && $respBody !== '');
+        }
         if ($respBody === false || $respBody === '') {
             self::debugLog($cfg, 'ai_search empty expansion response');
             return [];

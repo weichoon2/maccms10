@@ -217,7 +217,28 @@ class Index extends Controller
             $config_new['app']['api_jwt_secret'] = mac_get_rndstr(32);
         }
         $config_new['site']['install_dir'] = $install_dir;
-        
+
+        // AI 搜索反滥用配置：全新安装写入默认值（缺失才补，与升级脚本 data/update/database.php 保持一致）
+        if (!isset($config_new['ai_search']) || !is_array($config_new['ai_search'])) {
+            $config_new['ai_search'] = [];
+        }
+        $aiAbuseFill = [
+            'require_login'          => '1',
+            'anon_captcha_after'     => '10',
+            'daily_budget'           => '500',
+            'llm_call_cap'           => '3',
+            'circuit_fail_threshold' => '8',
+            'circuit_hold_seconds'   => '1800',
+        ];
+        foreach ($aiAbuseFill as $ai_k => $ai_v) {
+            if (!isset($config_new['ai_search'][$ai_k])) {
+                $config_new['ai_search'][$ai_k] = $ai_v;
+            }
+        }
+        if (!isset($config_new['trusted_proxies'])) {
+            $config_new['trusted_proxies'] = '';
+        }
+
         // 更新程序配置文件
         $res = mac_arr2file(APP_PATH . 'extra/maccms.php', $config_new);
 		if ($res === false) {
