@@ -64,7 +64,7 @@ class Admin extends Base {
                 unset($data['admin_pwd']);
             }
             else{
-                $data['admin_pwd'] = md5($data['admin_pwd']);
+                $data['admin_pwd'] = mac_hash_password($data['admin_pwd']);
             }
             $where=[];
             $where['admin_id'] = ['eq',$data['admin_id']];
@@ -75,7 +75,7 @@ class Admin extends Base {
                 return ['code'=>1002,'msg'=>lang('param_err').'：'.$validate->getError() ];
             }
 
-            $data['admin_pwd'] = md5($data['admin_pwd']);
+            $data['admin_pwd'] = mac_hash_password($data['admin_pwd']);
             $res = $this->insert($data);
         }
         if(false === $res){
@@ -123,7 +123,6 @@ class Admin extends Base {
 
         $where=[];
         $where['admin_name'] = ['eq',$data['admin_name']];
-        $where['admin_pwd'] = ['eq',md5($data['admin_pwd'])];
         $where['admin_status'] = ['eq',1];
 
         $row = $this->where($where)->find();
@@ -131,6 +130,12 @@ class Admin extends Base {
         if(empty($row)){
             return ['code'=>1003,'msg'=>lang('access_or_pass_err')];
         }
+
+        // 不再把 admin_pwd 放进 $where；先按用户名取行，再用 mac_verify_password 校验
+        if (!mac_verify_password($data['admin_pwd'], $row['admin_pwd'])) {
+            return ['code'=>1003,'msg'=>lang('access_or_pass_err')];
+        }
+
         $random = md5(rand(10000000,99999999));
         $update['admin_login_ip'] = mac_get_ip_long();
         $update['admin_login_time'] = time();
@@ -138,6 +143,11 @@ class Admin extends Base {
         $update['admin_random'] = $random;
         $update['admin_last_login_time'] = $row['admin_login_time'];
         $update['admin_last_login_ip'] = $row['admin_login_ip'];
+
+        // 惰性迁移：旧 md5/明文哈希在登录成功后升级为 bcrypt
+        if (mac_password_needs_rehash($row['admin_pwd'])) {
+            $update['admin_pwd'] = mac_hash_password($data['admin_pwd']);
+        }
 
         $res = $this->where($where)->update($update);
         if($res===false){

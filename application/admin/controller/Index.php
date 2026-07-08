@@ -210,7 +210,7 @@ class Index extends Base
         $param = input();
         $password = $param['password'];
 
-        if ($this->_admin['admin_pwd'] != md5($password)) {
+        if (!mac_verify_password($password, $this->_admin['admin_pwd'])) {
             return $this->error(lang('admin/index/pass_err'));
         }
 

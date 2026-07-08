@@ -431,13 +431,13 @@ class User extends Base
         if (!empty($param['user_email'])) $update['user_email'] = htmlspecialchars(trim($param['user_email']));
         if (!empty($param['user_phone'])) $update['user_phone'] = htmlspecialchars(trim($param['user_phone']));
         if (!empty($param['user_qq'])) $update['user_qq'] = htmlspecialchars(trim($param['user_qq']));
-        // 修改密码（使用单重 md5，与 model 层 User::saveData / login / register 保持一致）
+        // 修改密码（使用 bcrypt，与 model 层 User::saveData / login / register 保持一致）
         if (!empty($param['user_new_pwd']) && !empty($param['user_old_pwd'])) {
             $userInfo = Db::name('User')->field('user_pwd')->where('user_id', $uid)->find();
-            if (md5($param['user_old_pwd']) !== $userInfo['user_pwd']) {
+            if (!mac_verify_password($param['user_old_pwd'], $userInfo['user_pwd'])) {
                 return json(['code' => 1012, 'msg' => lang('model/user/old_pass_err')]);
             }
-            $update['user_pwd'] = md5($param['user_new_pwd']);
+            $update['user_pwd'] = mac_hash_password($param['user_new_pwd']);
         }
         if (empty($update)) return json(['code' => 1001, 'msg' => lang('api/no_update_needed')]);
         Db::name('User')->where('user_id', $uid)->update($update);

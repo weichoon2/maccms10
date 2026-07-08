@@ -394,6 +394,22 @@ if(!empty($col_list[$pre.'user']['group_id'] ?? null)){
         $sql .= "\r";
     }
 }
+// 漏洞8：密码哈希从无盐 md5 迁移到 bcrypt（60 字符）。加宽 user_pwd / admin_pwd 到 varchar(255)
+// 容纳 bcrypt 哈希并为未来算法预留空间。仅当列存在且尚未为 varchar(255) 时 MODIFY，保证幂等。
+if(!empty($col_list[$pre.'user']['user_pwd'] ?? null)){
+    $userPwdType = strtolower($col_list[$pre.'user']['user_pwd']['COLUMN_TYPE'] ?? '');
+    if ($userPwdType !== 'varchar(255)') {
+        $sql .= "ALTER TABLE `{$pre}user` MODIFY COLUMN `user_pwd` varchar(255) NOT NULL DEFAULT '';";
+        $sql .= "\r";
+    }
+}
+if(!empty($col_list[$pre.'admin']['admin_pwd'] ?? null)){
+    $adminPwdType = strtolower($col_list[$pre.'admin']['admin_pwd']['COLUMN_TYPE'] ?? '');
+    if ($adminPwdType !== 'varchar(255)') {
+        $sql .= "ALTER TABLE `{$pre}admin` MODIFY COLUMN `admin_pwd` varchar(255) NOT NULL DEFAULT '';";
+        $sql .= "\r";
+    }
+}
 // 好友邀请功能 - 添加邀请码相关字段
 if(empty($col_list[$pre.'user']['user_invite_code'])){
     $sql .= "ALTER TABLE `{$pre}user` ADD `user_invite_code` varchar(20) NOT NULL DEFAULT '' COMMENT '邀请码' AFTER `user_pid_3`;";

@@ -72,7 +72,7 @@ DROP TABLE IF EXISTS `mac_admin`;
 CREATE TABLE `mac_admin` (
   `admin_id` smallint(6) unsigned NOT NULL AUTO_INCREMENT,
   `admin_name` varchar(30) NOT NULL DEFAULT '',
-  `admin_pwd` char(32) NOT NULL DEFAULT '',
+  `admin_pwd` varchar(255) NOT NULL DEFAULT '',
   `admin_random` char(32) NOT NULL DEFAULT '',
   `admin_status` tinyint(1) unsigned NOT NULL DEFAULT '1',
   `admin_auth` text NOT NULL,
@@ -857,7 +857,7 @@ CREATE TABLE `mac_user` (
   `user_id` int(10) unsigned NOT NULL AUTO_INCREMENT,
   `group_id` varchar(255) NOT NULL DEFAULT '0' COMMENT '会员组ID,多个用逗号分隔',
   `user_name` varchar(30) NOT NULL DEFAULT '' ,
-  `user_pwd` varchar(32) NOT NULL DEFAULT '' ,
+  `user_pwd` varchar(255) NOT NULL DEFAULT '' ,
   `user_nick_name` varchar(30) NOT NULL DEFAULT '' ,
   `user_qq` varchar(16) NOT NULL DEFAULT '' ,
   `user_email` varchar(30) NOT NULL DEFAULT '' ,

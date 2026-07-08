@@ -143,7 +143,7 @@ class User extends Base
             if (empty($data['user_pwd'])) {
                 unset($data['user_pwd']);
             } else {
-                $data['user_pwd'] = md5($data['user_pwd']);
+                $data['user_pwd'] = mac_hash_password($data['user_pwd']);
             }
             $where = [];
             $where['user_id'] = ['eq', $data['user_id']];
@@ -153,7 +153,7 @@ class User extends Base
                 return ['code' => 1002, 'msg' => lang('param_err').'：' . $validate->getError()];
             }
 
-            $data['user_pwd'] = md5($data['user_pwd']);
+            $data['user_pwd'] = mac_hash_password($data['user_pwd']);
             $res = $this->insert($data);
             // 新增用户后自动生成邀请码
             if ($res !== false) {
@@ -254,7 +254,7 @@ class User extends Base
 
         $fields = [];
         $fields['user_name'] = $data['user_name'];
-        $fields['user_pwd'] = md5($password_raw);
+        $fields['user_pwd'] = mac_hash_password($password_raw);
         $fields['group_id'] = $this->_def_group;
         $fields['user_points'] = intval($config['user']['reg_points']);
         $fields['user_status'] = intval($config['user']['reg_status']);
@@ -389,7 +389,6 @@ class User extends Base
                 return ['code' => 1001, 'msg' => lang('model/user/input_old_pass')];
             }
             $password_raw = $pwd_old;
-            $password_formatted = htmlspecialchars(urldecode($pwd_old));
             // 必须用库里的哈希：$GLOBALS['user'] 经模板/接口传递时可能不含 user_pwd，导致误判「原密码错误」
             $uid = intval($GLOBALS['user']['user_id'] ?? 0);
             if ($uid < 1) {
@@ -397,19 +396,8 @@ class User extends Base
             }
             $storedHash = $this->where('user_id', $uid)->value('user_pwd');
             $storedHash = $storedHash === null ? '' : (string) $storedHash;
-            $try = [md5($password_raw), md5($password_formatted)];
-            // 与 login() 一致：兼容仅 md5(trim) 与 htmlspecialchars(urldecode(trim)) 后再 md5 两种入库方式
-            $ok = false;
-            foreach ($try as $h) {
-                if ($h !== '' && hash_equals($storedHash, $h)) {
-                    $ok = true;
-                    break;
-                }
-            }
-            // 与 login() 第二分支一致：极少数旧数据 user_pwd 列为明文
-            if (!$ok && $storedHash !== '' && ($storedHash === $password_raw || $storedHash === $password_formatted)) {
-                $ok = true;
-            }
+            // 集中到 mac_verify_password：兼容 bcrypt / md5(trim) / md5(formatted) / 明文 四种历史形态
+            $ok = mac_verify_password($password_raw, $storedHash);
             if (!$ok) {
                 return ['code' => 1002, 'msg' => lang('model/user/old_pass_err')];
             }
@@ -456,8 +444,7 @@ class User extends Base
 
         if (!empty($row)) {
             // ---- 帐号存在：校验密码 ----
-            $pwd_hash = md5($password_raw);
-            if ($row['user_pwd'] !== $pwd_hash) {
+            if (!mac_verify_password($password_raw, $row['user_pwd'])) {
                 return ['code' => 1003, 'msg' => lang('pass_err')];
             }
             if ($row['user_status'] != 1) {
@@ -479,6 +466,11 @@ class User extends Base
             $update['user_login_num'] = $row['user_login_num'] + 1;
             $update['user_last_login_time'] = $row['user_login_time'];
             $update['user_last_login_ip'] = $row['user_login_ip'];
+
+            // 惰性迁移：旧 md5/明文哈希在登录成功后升级为 bcrypt
+            if (mac_password_needs_rehash($row['user_pwd'])) {
+                $update['user_pwd'] = mac_hash_password($password_raw);
+            }
 
             $this->where('user_id', $row['user_id'])->update($update);
 
@@ -534,7 +526,7 @@ class User extends Base
         $random = md5(rand(10000000, 99999999));
         $fields = [];
         $fields['user_name'] = $user_name;
-        $fields['user_pwd'] = md5($password_raw);
+        $fields['user_pwd'] = mac_hash_password($password_raw);
         $fields['group_id'] = $this->_def_group;
         $fields['user_points'] = intval($config['user']['reg_points']);
         $fields['user_status'] = intval($config['user']['reg_status']);
@@ -639,8 +631,8 @@ class User extends Base
             } else {
                 $where['user_email'] = ['eq', $data['user_name']];
             }
-            // https://github.com/magicblack/maccms10/issues/781 兼容密码
-            $where['user_pwd'] = [['eq', md5($password_raw)], ['eq', $data['user_pwd']], 'or'];
+            // 移除 OR 分支（issues/781 遗留兼容）：不再接受「提交等于哈希值的字符串」。
+            // user_pwd 不放进 $where；先按用户名/邮箱取行，再用 mac_verify_password 校验。
         } else {
             if (empty($data['openid']) || empty($data['col'])) {
                 return ['code' => 1001, 'msg' => lang('model/user/input_require')];
@@ -657,6 +649,13 @@ class User extends Base
             return ['code' => 1003, 'msg' => lang('model/user/not_found')];
         }
 
+        // 用户名/密码登录需校验密码；openid 登录凭 openid 即可，不校验密码
+        if (empty($data['openid'])) {
+            if (!mac_verify_password($password_raw, $row['user_pwd'])) {
+                return ['code' => 1003, 'msg' => lang('model/user/not_found')];
+            }
+        }
+
         $login_group_ids = explode(',', $row['group_id']);
         if(max($login_group_ids) > 2 &&  $row['user_end_time'] < time()) {
             $row['group_id'] = 2;
@@ -670,6 +669,13 @@ class User extends Base
         $update['user_login_num'] = $row['user_login_num'] + 1;
         $update['user_last_login_time'] = $row['user_login_time'];
         $update['user_last_login_ip'] = $row['user_login_ip'];
+
+        // 惰性迁移：旧 md5/明文哈希在登录成功后升级为 bcrypt。
+        // 仅用户名/密码登录路径才迁移——openid 登录未校验密码，$password_raw 为空，
+        // 若在此迁移会用空字符串 bcrypt 覆盖真实密码哈希，破坏密码登录。
+        if (empty($data['openid']) && mac_password_needs_rehash($row['user_pwd'])) {
+            $update['user_pwd'] = mac_hash_password($password_raw);
+        }
 
         $res = $this->where($where)->update($update);
         if ($res === false) {
@@ -892,7 +898,7 @@ class User extends Base
         }
 
         $update = [];
-        $update['user_pwd'] = md5($password_raw);
+        $update['user_pwd'] = mac_hash_password($password_raw);
 
         $where = [];
         $where['user_id'] = $info['user_id'];
@@ -1363,7 +1369,7 @@ class User extends Base
         }
 
         $update = [];
-        $update['user_pwd'] = md5($password_raw);
+        $update['user_pwd'] = mac_hash_password($password_raw);
         $res = $this->where($where)->update($update);
         if($res===false){
             return ['code'=>2009,'msg'=>lang('model/user/pass_reset_err')];

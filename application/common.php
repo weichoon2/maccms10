@@ -376,6 +376,84 @@ function mac_replace_text($txt,$type=1)
     return str_replace(chr(13),'#',str_replace(chr(10),'',$txt));
 }
 
+/**
+ * 用 bcrypt 生成密码哈希（含每条哈希独立盐）。写入侧统一用此函数，
+ * 永不再产生 md5/无盐哈希。读取侧用 mac_verify_password 兼容遗留形态。
+ *
+ * @param string $raw 明文密码
+ * @return string 60 字符的 bcrypt 哈希（$2y$10$...）
+ */
+function mac_hash_password($raw)
+{
+    return password_hash((string)$raw, PASSWORD_BCRYPT);
+}
+
+/**
+ * 校验明文密码是否匹配存储哈希。兼容 bcrypt 与三种遗留形态：
+ *   - bcrypt（$2y$/$2a$/$2b$ 前缀）→ password_verify
+ *   - md5(trim(pwd))              → hash_equals
+ *   - md5(htmlspecialchars(urldecode(trim(pwd))))  → hash_equals
+ *   - 极少数旧库 user_pwd 列为明文 → 直接比对
+ * 全部使用常量时间比较，防时序侧信道。此函数只读，永不写回。
+ *
+ * @param string $raw       用户提交的明文密码
+ * @param string $stored    数据库存储的哈希
+ * @return bool
+ */
+function mac_verify_password($raw, $stored)
+{
+    $stored = (string)$stored;
+    if ($stored === '') {
+        return false;
+    }
+
+    // 新形态：bcrypt
+    if (strncmp($stored, '$2', 2) === 0) {
+        return password_verify((string)$raw, $stored);
+    }
+
+    // 遗留形态：两种 md5 变体
+    $raw_str = (string)$raw;
+    $formatted = htmlspecialchars(urldecode(trim($raw_str)));
+    if (hash_equals($stored, md5($raw_str))) {
+        return true;
+    }
+    if (hash_equals($stored, md5($formatted))) {
+        return true;
+    }
+
+    // 遗留形态：极少数旧数据 user_pwd 列为明文（User::info / changePwd 历史兼容分支）。
+    // 仅当 stored 本身不是 32 位 md5 hex 时才比对明文——否则「提交等于哈希值的字符串」
+    // 会被 stored===raw 命中，重新引入 OR 分支被移除的绕过面（漏洞 8）。
+    if (!preg_match('/^[0-9a-f]{32}$/', $stored) && ($stored === $raw_str || $stored === $formatted)) {
+        return true;
+    }
+
+    return false;
+}
+
+/**
+ * 判断存储哈希是否需要升级为 bcrypt。
+ *   - bcrypt → password_needs_rehash（成本因子变更时也触发）
+ *   - md5/明文 → 永远需要升级
+ * 登录成功后调用此函数；若返回 true 则用 mac_hash_password 覆写，实现惰性迁移。
+ *
+ * @param string $stored 数据库存储的哈希
+ * @return bool
+ */
+function mac_password_needs_rehash($stored)
+{
+    $stored = (string)$stored;
+    if ($stored === '') {
+        return false;
+    }
+    if (strncmp($stored, '$2', 2) === 0) {
+        return password_needs_rehash($stored, PASSWORD_BCRYPT);
+    }
+    // md5 / 明文 一律需要升级
+    return true;
+}
+
 function mac_compress_html($s){
     $s = str_replace(array("\r\n","\n","\t"), array('','','') , $s);
     $pattern = array (
