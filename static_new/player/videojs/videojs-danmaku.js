@@ -283,6 +283,20 @@
 				});
 		}
 
+		function pushDanmaku(data) {
+			if (!state.dmOn) return;
+			var t = Number(data && data.time) || 0;
+			var ty = data && data.dmType != null ? data.dmType : 0;
+			try {
+				cm.send({
+					stime: Math.round(t * 1000),
+					mode: mapMode(ty),
+					text: String((data && data.text) || ''),
+					color: colorToInt((data && data.color) || '#FFFFFF'),
+				});
+			} catch (ePush) {}
+		}
+
 		function onWinMessage(ev) {
 			if (typeof player.isDisposed === 'function' && player.isDisposed()) {
 				return;
@@ -309,6 +323,10 @@
 			}
 			if (d.type === 'danmaku_submit' && d.text) {
 				sendDanmaku(String(d.text), d.color, d.dmType);
+				return;
+			}
+			if (d.type === 'danmaku_push' && d.text) {
+				pushDanmaku(d);
 			}
 		}
 

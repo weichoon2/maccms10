@@ -157,7 +157,23 @@ class Chatroom extends Base {
         } else {
             $data['chat_time'] = time();
             $data['chat_ip'] = mac_get_ip_long();
-            $res = $this->allowField(true)->insert($data);
+            $res = $this->allowField(true)->insertGetId($data);
+            if (false !== $res && function_exists('hook')) {
+                hook('social_broadcast', [
+                    'kind'   => 'chat',
+                    'vod_id' => (int)$data['vod_id'],
+                    'data'   => [
+                        'chat_id'        => (int)$res,
+                        'vod_id'         => (int)$data['vod_id'],
+                        'user_id'        => (int)$data['user_id'],
+                        'user_name'      => $data['user_name'],
+                        'user_portrait'  => mac_get_user_portrait($data['user_id']),
+                        'chat_content'   => $data['chat_content'],
+                        'chat_time'      => (int)$data['chat_time'],
+                        'chat_time_text' => date('H:i:s', $data['chat_time']),
+                    ],
+                ]);
+            }
         }
 
         if (false === $res) {

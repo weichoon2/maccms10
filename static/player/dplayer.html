@@ -559,6 +559,16 @@
 			);
 			return;
 		}
+		if (d.type === 'danmaku_push' && dp.danmaku && typeof dp.danmaku.draw === 'function') {
+			dp.danmaku.draw({
+				time: Number(d.time) || 0,
+				type: d.dmType != null ? d.dmType : 0,
+				color: d.color || '#FFFFFF',
+				author: d.author || '',
+				text: String(d.text || ''),
+			});
+			return;
+		}
 		if (d.type === 'progress_seek') {
 			seekToPoint(d.point);
 		}

@@ -264,6 +264,30 @@
       });
   }
 
+  function pushDanmaku(data) {
+    var t = Number(data && data.time) || 0;
+    var ty = data && data.dmType != null ? data.dmType : 0;
+    var color = (data && data.color) || '#FFFFFF';
+    if (!/^#[0-9a-fA-F]{3,8}$/.test(color)) color = '#fff';
+    var text = (data && data.text) || '';
+    var row = [t, ty, color, (data && data.author) || '', text];
+    var inserted = false;
+    for (var i = 0; i < dmList.length; i++) {
+      if (dmList[i][0] > t) {
+        dmList.splice(i, 0, row);
+        inserted = true;
+        break;
+      }
+    }
+    if (!inserted) dmList.push(row);
+    var cur = C.getTime();
+    if (typeof cur === 'number' && !isNaN(cur) && t <= cur + 0.12) {
+      spawnRow(row);
+    } else if (t < cur) {
+      dmIdx = Math.min(dmIdx + 1, dmList.length);
+    }
+  }
+
   function onMessage(ev) {
     var d = ev.data;
     if (!d || d.source !== MSG_PARENT) return;
@@ -293,6 +317,9 @@
     }
     if (d.type === 'danmaku_submit' && d.text) {
       sendDanmaku(String(d.text), d.color, d.dmType);
+    }
+    if (d.type === 'danmaku_push' && d.text) {
+      pushDanmaku(d);
     }
   }
 

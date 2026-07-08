@@ -161,11 +161,28 @@ class Danmaku extends Base {
         } else {
             $data['danmaku_send_time'] = time();
             $data['danmaku_ip'] = mac_get_ip_long();
-            $res = $this->allowField(true)->insert($data);
+            $res = $this->allowField(true)->insertGetId($data);
 
             // 清除该集弹幕缓存
             $cache_key = $GLOBALS['config']['app']['cache_flag'] . '_danmaku_' . $data['vod_id'] . '_' . $data['vod_sid'] . '_' . $data['vod_nid'];
             \think\Cache::rm($cache_key);
+
+            if (false !== $res && function_exists('hook')) {
+                hook('social_broadcast', [
+                    'kind'   => 'danmaku',
+                    'vod_id' => (int)$data['vod_id'],
+                    'sid'    => (int)$data['vod_sid'],
+                    'nid'    => (int)$data['vod_nid'],
+                    'data'   => [
+                        'danmaku_id' => (int)$res,
+                        'time'       => (float)$data['danmaku_time'],
+                        'type'       => (int)$data['danmaku_type'],
+                        'color'      => $data['danmaku_color'],
+                        'author'     => $data['user_name'],
+                        'text'       => $data['danmaku_text'],
+                    ],
+                ]);
+            }
         }
 
         if (false === $res) {
