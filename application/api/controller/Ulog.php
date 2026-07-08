@@ -217,6 +217,96 @@ class Ulog extends Base
     }
 
     /**
+     * 继续观看列表（首页/个人中心"继续观看"轨道数据源）
+     * GET api.php/ulog/continue_list
+     * 参数：
+     *   page          页码(可选,默认1)
+     *   limit         每页条数(可选,默认12,上限30)
+     *   hide_finished 是否过滤已看完的记录(0/1,可选,默认0；已看完定义为进度>=95%)
+     * 需登录；未登录回 {code:1401}，前端可用 localStorage 兜底渲染。
+     * 返回 list 每项包含 vod_id, vod_name, vod_pic, vod_remarks, type,
+     * sid, nid, point, duration, percent, finished, episode_name,
+     * link_play(续播直达链接), link_detail, time。
+     * 注意：该接口返回个性化数据，页面缓存场景下应由前端 JS 调用渲染。
+     */
+    public function continue_list(Request $request)
+    {
+        $check = model('User')->checkLogin();
+        if ($check['code'] > 1) {
+            return json(['code' => 1401, 'msg' => lang('api/please_login_first')]);
+        }
+        $uid = intval($check['info']['user_id']);
+
+        $param = $request->param();
+        $page = intval($param['page'] ?? 1);
+        $limit = intval($param['limit'] ?? 12);
+        if ($page < 1) {
+            $page = 1;
+        }
+        if ($limit < 1) {
+            $limit = 12;
+        }
+        if ($limit > 30) {
+            $limit = 30;
+        }
+        $options = [
+            'hide_finished' => intval($param['hide_finished'] ?? 0) === 1,
+        ];
+
+        $res = model('Ulog')->continueWatchData($uid, $page, $limit, $options);
+        return json($res);
+    }
+
+    /**
+     * 删除"继续观看"进度记录（轨道卡片移除按钮的配套接口）
+     * POST api.php/ulog/delete_progress
+     * 参数：
+     *   vod_id 必填，影片ID
+     *   nid    可选，指定集数；不传则删除该影片的全部进度记录
+     * 需登录；仅能删除当前登录用户自己的播放历史记录。
+     */
+    public function delete_progress(Request $request)
+    {
+        if (!$request->isPost()) {
+            return json(['code' => 1001, 'msg' => lang('param_err')]);
+        }
+
+        $check = model('User')->checkLogin();
+        if ($check['code'] > 1) {
+            return json(['code' => 1401, 'msg' => lang('api/please_login_first')]);
+        }
+        $uid = intval($check['info']['user_id']);
+
+        $param = $request->post();
+        $vodId = intval($param['vod_id'] ?? 0);
+        if ($vodId < 1) {
+            return json(['code' => 1001, 'msg' => lang('param_err')]);
+        }
+
+        // 权限隔离：仅限本人 user_id 下的播放历史
+        $where = [
+            'user_id'   => $uid,
+            'ulog_mid'  => 1,
+            'ulog_type' => 4,
+            'ulog_rid'  => $vodId,
+        ];
+        if (isset($param['nid']) && $param['nid'] !== '') {
+            $where['ulog_nid'] = intval($param['nid']);
+        }
+
+        $count = Db::name('ulog')->where($where)->delete();
+        if ($count === false) {
+            return json(['code' => 1004, 'msg' => lang('del_err')]);
+        }
+
+        return json([
+            'code' => 1,
+            'msg'  => lang('del_ok'),
+            'info' => ['deleted' => intval($count)],
+        ]);
+    }
+
+    /**
      * 上报一次线路播放失败（前端播放器 onerror 自动切换线路时调用）
      * POST api.php/ulog/report_fail
      * 参数：

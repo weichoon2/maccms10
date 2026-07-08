@@ -135,6 +135,147 @@ class Ulog extends Base {
         return ['code'=>1,'msg'=>lang('data_list'),'page'=>$page,'pagecount'=>ceil($total/$limit),'limit'=>$limit,'total'=>$total,'list'=>$list];
     }
 
+    /**
+     * 继续观看列表（带播放进度）
+     * 基于播放历史记录 ulog_mid=1 且 ulog_type=4，按最近播放时间倒序
+     *
+     * @param int   $user_id 用户ID
+     * @param int   $page    页码
+     * @param int   $limit   每页条数
+     * @param array $options 可选项 hide_finished=1 时过滤已看完(percent>=95)的记录
+     * @return array ['code'=>1,'page'=>..,'pagecount'=>..,'limit'=>..,'total'=>..,'list'=>[...]]
+     */
+    public function continueWatchData($user_id, $page = 1, $limit = 12, $options = [])
+    {
+        $user_id = intval($user_id);
+        $page = $page > 0 ? intval($page) : 1;
+        $limit = $limit > 0 ? intval($limit) : 12;
+        $hide_finished = !empty($options['hide_finished']);
+
+        if ($user_id < 1) {
+            return ['code' => 1001, 'msg' => lang('param_err')];
+        }
+
+        $where = [
+            'user_id'   => ['eq', $user_id],
+            'ulog_mid'  => ['eq', 1],
+            'ulog_type' => ['eq', 4],
+        ];
+        // 已看完定义：duration>0 且 point/duration >= 95%
+        $finished_sql = '(ulog_duration <= 0 OR ulog_point * 100 < ulog_duration * 95)';
+
+        $total_query = Db::name('Ulog')->where($where);
+        $rows_query = Db::name('Ulog')
+            ->field('ulog_id,ulog_rid,ulog_sid,ulog_nid,ulog_point,ulog_duration,ulog_time')
+            ->where($where);
+        if ($hide_finished) {
+            $total_query->where($finished_sql);
+            $rows_query->where($finished_sql);
+        }
+
+        $total = $total_query->count();
+        $rows = $rows_query
+            ->order('ulog_time desc')
+            ->limit(($limit * ($page - 1)) . ',' . $limit)
+            ->select();
+
+        $list = [];
+        if (!empty($rows)) {
+            // 批量取影片信息，避免 N+1 查询；已删除的影片自动过滤
+            $vod_ids = [];
+            foreach ($rows as $v) {
+                $vod_ids[intval($v['ulog_rid'])] = intval($v['ulog_rid']);
+            }
+            $vod_list = Db::name('Vod')
+                ->field('vod_id,type_id,type_id_1,vod_name,vod_en,vod_letter,vod_pic,vod_remarks,vod_play_from,vod_play_url,vod_time')
+                ->where('vod_id', 'in', array_values($vod_ids))
+                ->select();
+            $vod_list = mac_array_rekey($vod_list, 'vod_id');
+
+            $type_list = model('Type')->getCache('type_list');
+
+            foreach ($rows as $v) {
+                $vod_id = intval($v['ulog_rid']);
+                if (!isset($vod_list[$vod_id])) {
+                    continue;
+                }
+                $vod = $vod_list[$vod_id];
+
+                $sid = intval($v['ulog_sid']);
+                $nid = intval($v['ulog_nid']);
+                $point = intval($v['ulog_point']);
+                $duration = intval($v['ulog_duration']);
+
+                $percent = 0;
+                if ($duration > 0) {
+                    $percent = intval(floor($point * 100 / $duration));
+                    if ($percent > 100) {
+                        $percent = 100;
+                    }
+                }
+
+                // 解析集数名称，如 "第08集"
+                $episode_name = '';
+                if ($sid > 0 && $nid > 0 && !empty($vod['vod_play_url'])) {
+                    $play_url_arr = explode('$$$', $vod['vod_play_url']);
+                    if (isset($play_url_arr[$sid - 1])) {
+                        $episode_arr = explode('#', $play_url_arr[$sid - 1]);
+                        if (isset($episode_arr[$nid - 1])) {
+                            $tmp = explode('$', $episode_arr[$nid - 1]);
+                            $episode_name = trim($tmp[0]);
+                        }
+                    }
+                }
+
+                // 续播直达链接；无 sid/nid 时退回详情页
+                if ($sid > 0 && $nid > 0) {
+                    $link_play = mac_url_vod_play($vod, ['sid' => $sid, 'nid' => $nid]);
+                } else {
+                    $link_play = mac_url_vod_detail($vod);
+                }
+
+                $type_info = [];
+                if (isset($type_list[$vod['type_id']])) {
+                    $type = $type_list[$vod['type_id']];
+                    $type_info = [
+                        'type_id'   => intval($type['type_id']),
+                        'type_name' => $type['type_name'],
+                        'link'      => mac_url_type($type),
+                    ];
+                }
+
+                $list[] = [
+                    'ulog_id'      => intval($v['ulog_id']),
+                    'vod_id'       => $vod_id,
+                    'vod_name'     => $vod['vod_name'],
+                    'vod_pic'      => mac_url_img($vod['vod_pic']),
+                    'vod_remarks'  => $vod['vod_remarks'],
+                    'type'         => $type_info,
+                    'sid'          => $sid,
+                    'nid'          => $nid,
+                    'point'        => $point,
+                    'duration'     => $duration,
+                    'percent'      => $percent,
+                    'finished'     => ($duration > 0 && $percent >= 95) ? 1 : 0,
+                    'episode_name' => $episode_name,
+                    'link_play'    => $link_play,
+                    'link_detail'  => mac_url_vod_detail($vod),
+                    'time'         => intval($v['ulog_time']),
+                ];
+            }
+        }
+
+        return [
+            'code'      => 1,
+            'msg'       => lang('data_list'),
+            'page'      => $page,
+            'pagecount' => ceil($total / $limit),
+            'limit'     => $limit,
+            'total'     => $total,
+            'list'      => $list,
+        ];
+    }
+
     public function infoData($where,$field='*')
     {
         if(empty($where) || !is_array($where)){

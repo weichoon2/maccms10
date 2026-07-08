@@ -803,7 +803,8 @@ CREATE TABLE `mac_ulog` (
   KEY `user_id` (`user_id`),
   KEY `ulog_mid` (`ulog_mid`),
   KEY `ulog_type` (`ulog_type`),
-  KEY `ulog_rid` (`ulog_rid`)
+  KEY `ulog_rid` (`ulog_rid`),
+  KEY `idx_user_mid_type_time` (`user_id`,`ulog_mid`,`ulog_type`,`ulog_time`)
 ) ENGINE=MyISAM AUTO_INCREMENT=1 DEFAULT CHARSET=utf8 ;
 
 -- ----------------------------

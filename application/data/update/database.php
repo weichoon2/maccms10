@@ -582,6 +582,16 @@ if(!empty($col_list[$pre.'ulog']) && empty($col_list[$pre.'ulog']['ulog_point'])
     $sql .= "ALTER TABLE `{$pre}ulog` ADD `ulog_point` int(10) unsigned NOT NULL DEFAULT '0' COMMENT '已观看秒数' AFTER `ulog_points`, ADD `ulog_duration` int(10) unsigned NOT NULL DEFAULT '0' COMMENT '影片总时长(秒)' AFTER `ulog_point`;";
     $sql .= "\r";
 }
+// 续播/播放记录查询优化：mac_ulog 复合索引 (user_id, ulog_mid, ulog_type, ulog_time)
+// 覆盖“按用户+模块+类型筛选并按时间倒序”的续播/历史查询，避免仅命中 ulog_mid 低区分度索引及 ulog_time filesort
+// 使用 SHOW INDEX 检查索引是否已存在，保证升级幂等
+if(!empty($col_list[$pre.'ulog'])){
+    $index_exists = \think\Db::query("SHOW INDEX FROM `{$pre}ulog` WHERE Key_name = 'idx_user_mid_type_time'");
+    if(empty($index_exists)){
+        $sql .= "ALTER TABLE `{$pre}ulog` ADD INDEX `idx_user_mid_type_time` (`user_id`,`ulog_mid`,`ulog_type`,`ulog_time`);";
+        $sql .= "\r";
+    }
+}
 // 播放失败自动切换线路：视频线路播放失败统计表
 if(empty($col_list[$pre.'vod_play_fail'])){
     $sql .= "CREATE TABLE `{$pre}vod_play_fail` (";
