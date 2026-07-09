@@ -84,9 +84,6 @@ class Session
         if (isset($config['httponly'])) {
             ini_set('session.cookie_httponly', $config['httponly']);
         }
-        if (isset($config['samesite'])) {
-            ini_set('session.cookie_samesite', $config['samesite']);
-        }
         if (isset($config['use_cookies'])) {
             ini_set('session.use_cookies', $config['use_cookies'] ? 1 : 0);
         }

@@ -191,7 +191,8 @@ polyfill;
         if (session('?csrf_token')) {
             $csrfToken = (string)session('csrf_token');
             // 通过 cookie 暴露给前端（双重提交模式），非 httponly 以便 JS 读取
-            cookie('csrf_token', $csrfToken, ['httponly' => false, 'samesite' => 'Lax']);
+            // SameSite 由 app_end 的 CookieSameSite 行为统一补写，读取 config.cookie.samesite
+            cookie('csrf_token', $csrfToken, ['httponly' => false]);
         }
         $this->assign('csrf_token', $csrfToken);
     }

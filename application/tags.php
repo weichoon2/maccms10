@@ -42,6 +42,7 @@ return [
     // 应用结束
     'app_end'      => [
         'app\\common\\behavior\\SecurityHeaders',
+        'app\\common\\behavior\\CookieSameSite',
         'app\\common\\behavior\\AdminAudit',
     ],
 ];
