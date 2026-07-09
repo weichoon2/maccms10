@@ -64,7 +64,7 @@ class Admin extends Base {
                 unset($data['admin_pwd']);
             }
             else{
-                $data['admin_pwd'] = mac_hash_password($data['admin_pwd']);
+                $data['admin_pwd'] = mac_hash_password_for_column($data['admin_pwd'], 'admin', 'admin_pwd');
             }
             $where=[];
             $where['admin_id'] = ['eq',$data['admin_id']];
@@ -75,7 +75,7 @@ class Admin extends Base {
                 return ['code'=>1002,'msg'=>lang('param_err').'：'.$validate->getError() ];
             }
 
-            $data['admin_pwd'] = mac_hash_password($data['admin_pwd']);
+            $data['admin_pwd'] = mac_hash_password_for_column($data['admin_pwd'], 'admin', 'admin_pwd');
             $res = $this->insert($data);
         }
         if(false === $res){
@@ -144,8 +144,10 @@ class Admin extends Base {
         $update['admin_last_login_time'] = $row['admin_login_time'];
         $update['admin_last_login_ip'] = $row['admin_login_ip'];
 
-        // 惰性迁移：旧 md5/明文哈希在登录成功后升级为 bcrypt
-        if (mac_password_needs_rehash($row['admin_pwd'])) {
+        // 惰性迁移：旧 md5/明文哈希在登录成功后升级为 bcrypt。
+        // 升级窗口期 admin_pwd 列可能仍是 varchar(32)，先确认列宽能容纳 60 字符
+        // bcrypt，否则跳过迁移避免被静默截断锁死账号。
+        if (mac_password_needs_rehash($row['admin_pwd']) && mac_pwd_column_fits_hash('admin', 'admin_pwd')) {
             $update['admin_pwd'] = mac_hash_password($data['admin_pwd']);
         }
 

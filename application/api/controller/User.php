@@ -437,7 +437,7 @@ class User extends Base
             if (!mac_verify_password($param['user_old_pwd'], $userInfo['user_pwd'])) {
                 return json(['code' => 1012, 'msg' => lang('model/user/old_pass_err')]);
             }
-            $update['user_pwd'] = mac_hash_password($param['user_new_pwd']);
+            $update['user_pwd'] = mac_hash_password_for_column($param['user_new_pwd'], 'user', 'user_pwd');
         }
         if (empty($update)) return json(['code' => 1001, 'msg' => lang('api/no_update_needed')]);
         Db::name('User')->where('user_id', $uid)->update($update);

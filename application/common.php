@@ -454,6 +454,75 @@ function mac_password_needs_rehash($stored)
     return true;
 }
 
+/**
+ * 判断密码列能否容纳 60 字符的 bcrypt 哈希。
+ * 升级窗口期内（代码已升级但 DB 增量脚本未跑）user_pwd/admin_pwd 可能仍是
+ * char(32)/varchar(32)，此时惰性迁移写回 60 字符 bcrypt 会在非严格 SQL 模式下
+ * 被静默截断成 32 字符，导致该用户此后永久无法登录。写回前先用本函数确认列宽，
+ * 不足则跳过迁移（旧 md5 哈希由 mac_verify_password 兼容，登录不受影响，
+ * 迁移延后到 DB 升级完成后自然进行）。结果按 table.column 用 static 缓存，
+ * 避免每次登录重复查询列信息。
+ *
+ * @param string $table  模型层的无前缀表名（如 'user'、'admin'）
+ * @param string $column 密码列名（如 'user_pwd'、'admin_pwd'）
+ * @return bool          列可容纳 >= 60 字符返回 true，否则 false
+ */
+function mac_pwd_column_fits_hash($table, $column)
+{
+    static $cache = array();
+    $key = $table . '.' . $column;
+    if (isset($cache[$key])) {
+        return $cache[$key];
+    }
+    $fits = false;
+    try {
+        // $table/$column 均为代码内常量，非用户输入；SHOW COLUMNS 无法参数化表名。
+        // 用 WHERE Field = '列名' 精确匹配，避免 LIKE 把列名里的 '_' 当作通配符
+        // （如 user_pwd 的 '_' 会误匹配 userXpwd 等同形列）。
+        $full = config('database.prefix') . $table;
+        $rows = \think\Db::query("SHOW COLUMNS FROM `{$full}` WHERE Field = '" . addslashes($column) . "'");
+        if (!empty($rows) && isset($rows[0]['Type'])) {
+            $type = strtolower($rows[0]['Type']);
+            if (preg_match('/(?:var)?char\s*\(\s*(\d+)\s*\)/', $type, $m)) {
+                $fits = ((int)$m[1] >= 60);
+            } elseif (strpos($type, 'text') !== false || strpos($type, 'blob') !== false) {
+                // text/blob 家族容量远超 60 字符
+                $fits = true;
+            }
+        }
+    } catch (\Exception $e) {
+        // 查询失败时保守跳过迁移，宁可延后也不冒截断风险
+        $fits = false;
+    }
+    $cache[$key] = $fits;
+    return $fits;
+}
+
+/**
+ * 按目标密码列的实际宽度选择哈希形态，供所有写入侧（注册/改密/后台新增管理员等）调用。
+ * 升级窗口期内（代码已升级但 DB 增量脚本未跑）user_pwd/admin_pwd 可能仍是
+ * char(32)/varchar(32)，此时直接写 60 字符 bcrypt 会在非严格 SQL 模式下被静默截断、
+ * 严格模式下直接报错，导致新注册/改密的账号密码永久损坏。
+ *   - 列宽足够（>= 60）→ 返回 mac_hash_password 的 bcrypt 哈希；
+ *   - 列宽不足        → 回退返回 md5((string)$raw)。
+ * 回退的 md5 形态被 mac_verify_password 兼容，账号在窗口期仍可正常登入；且
+ * mac_password_needs_rehash 会将其判定为需升级，待 DB 升级加宽列后，由既有惰性
+ * 迁移路径（登录成功时写回）自然升级为 bcrypt。故 md5 仅是窗口期临时形态，
+ * 不构成长期弱哈希风险。
+ *
+ * @param string $raw    明文密码
+ * @param string $table  模型层的无前缀表名（如 'user'、'admin'）
+ * @param string $column 密码列名（如 'user_pwd'、'admin_pwd'）
+ * @return string        列宽足够返回 60 字符 bcrypt，否则返回 32 字符 md5
+ */
+function mac_hash_password_for_column($raw, $table, $column)
+{
+    if (mac_pwd_column_fits_hash($table, $column)) {
+        return mac_hash_password($raw);
+    }
+    return md5((string)$raw);
+}
+
 function mac_compress_html($s){
     $s = str_replace(array("\r\n","\n","\t"), array('','','') , $s);
     $pattern = array (

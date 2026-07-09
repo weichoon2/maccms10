@@ -143,7 +143,7 @@ class User extends Base
             if (empty($data['user_pwd'])) {
                 unset($data['user_pwd']);
             } else {
-                $data['user_pwd'] = mac_hash_password($data['user_pwd']);
+                $data['user_pwd'] = mac_hash_password_for_column($data['user_pwd'], 'user', 'user_pwd');
             }
             $where = [];
             $where['user_id'] = ['eq', $data['user_id']];
@@ -153,7 +153,7 @@ class User extends Base
                 return ['code' => 1002, 'msg' => lang('param_err').'：' . $validate->getError()];
             }
 
-            $data['user_pwd'] = mac_hash_password($data['user_pwd']);
+            $data['user_pwd'] = mac_hash_password_for_column($data['user_pwd'], 'user', 'user_pwd');
             $res = $this->insert($data);
             // 新增用户后自动生成邀请码
             if ($res !== false) {
@@ -254,7 +254,7 @@ class User extends Base
 
         $fields = [];
         $fields['user_name'] = $data['user_name'];
-        $fields['user_pwd'] = mac_hash_password($password_raw);
+        $fields['user_pwd'] = mac_hash_password_for_column($password_raw, 'user', 'user_pwd');
         $fields['group_id'] = $this->_def_group;
         $fields['user_points'] = intval($config['user']['reg_points']);
         $fields['user_status'] = intval($config['user']['reg_status']);
@@ -492,8 +492,10 @@ class User extends Base
             $update['user_last_login_time'] = $row['user_login_time'];
             $update['user_last_login_ip'] = $row['user_login_ip'];
 
-            // 惰性迁移：旧 md5/明文哈希在登录成功后升级为 bcrypt
-            if (mac_password_needs_rehash($row['user_pwd'])) {
+            // 惰性迁移：旧 md5/明文哈希在登录成功后升级为 bcrypt。
+            // 升级窗口期 user_pwd 列可能仍是 char(32)/varchar(32)，先确认列宽
+            // 能容纳 60 字符 bcrypt，否则跳过迁移避免被静默截断锁死账号。
+            if (mac_password_needs_rehash($row['user_pwd']) && mac_pwd_column_fits_hash('user', 'user_pwd')) {
                 $update['user_pwd'] = mac_hash_password($password_raw);
             }
 
@@ -551,7 +553,7 @@ class User extends Base
         $random = md5(rand(10000000, 99999999));
         $fields = [];
         $fields['user_name'] = $user_name;
-        $fields['user_pwd'] = mac_hash_password($password_raw);
+        $fields['user_pwd'] = mac_hash_password_for_column($password_raw, 'user', 'user_pwd');
         $fields['group_id'] = $this->_def_group;
         $fields['user_points'] = intval($config['user']['reg_points']);
         $fields['user_status'] = intval($config['user']['reg_status']);
@@ -698,7 +700,8 @@ class User extends Base
         // 惰性迁移：旧 md5/明文哈希在登录成功后升级为 bcrypt。
         // 仅用户名/密码登录路径才迁移——openid 登录未校验密码，$password_raw 为空，
         // 若在此迁移会用空字符串 bcrypt 覆盖真实密码哈希，破坏密码登录。
-        if (empty($data['openid']) && mac_password_needs_rehash($row['user_pwd'])) {
+        // 同上：列宽不足时跳过写回，避免升级窗口期 bcrypt 被截断锁死账号。
+        if (empty($data['openid']) && mac_password_needs_rehash($row['user_pwd']) && mac_pwd_column_fits_hash('user', 'user_pwd')) {
             $update['user_pwd'] = mac_hash_password($password_raw);
         }
 
@@ -923,7 +926,7 @@ class User extends Base
         }
 
         $update = [];
-        $update['user_pwd'] = mac_hash_password($password_raw);
+        $update['user_pwd'] = mac_hash_password_for_column($password_raw, 'user', 'user_pwd');
 
         $where = [];
         $where['user_id'] = $info['user_id'];
@@ -1407,7 +1410,7 @@ class User extends Base
         }
 
         $update = [];
-        $update['user_pwd'] = mac_hash_password($password_raw);
+        $update['user_pwd'] = mac_hash_password_for_column($password_raw, 'user', 'user_pwd');
         $res = $this->where($where)->update($update);
         if($res===false){
             return ['code'=>2009,'msg'=>lang('model/user/pass_reset_err')];
