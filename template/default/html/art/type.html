@@ -1,89 +1,39 @@
 <!DOCTYPE html>
 <html>
+
 <head>
-       
-	{include file="public/include"}
-  <link rel="stylesheet" type="text/css" href="{$maccms.path_tpl}/asset/css/art-type.css" />
-  <link rel="stylesheet" type="text/css" href="{$maccms.path_tpl}/asset/css/home-banner.css" />
+    {include file="public/include"}
+    <link rel="stylesheet" type="text/css" href="{$maccms.path_tpl}/asset/css/type-show.css" />
 </head>
 
-<body id="art_page">
+<body>
     {include file="public/th" /}
-		{include file="public/head"}
-<div class="member-wrap">
-   <div class="container ">
-        {include file="ads/ads_all"}
-		<div class="art_list_row">
-            <div class="art_nav_strip show-pc">
-                <div class="art_navlist" id="hl01">
-                    <div class="scroller">
-                        <ul class="clearfix">
-                            {maccms:type mid="2" order="sort desc" by="sort"}
-                            <li {if condition="($vo.type_id eq $GLOBALS['type_id'] || $vo.type_id eq $GLOBALS['type_pid'])"}class="active"{/if}><a href="{:mac_url_type($vo)}" class="text_muted">{$vo.type_name}</a></li>
-                            {/maccms:type}
-                        </ul>
+    {php}$art_poster_class = (mac_tpl_art_cover() === 'h') ? 'mac-poster--h' : 'mac-poster--v';
+    $mac_show_reset_tid = (isset($obj['type_pid']) && (int)$obj['type_pid'] > 0) ? (int)$obj['type_pid'] : (int)($obj['type_id'] ?? 0);{/php}
+    <div id="show_page" class="mac-catalog-show mac-catalog-show--filter-collapsed" data-list-mode="ajax" data-mid="2" data-type-id="{$obj.type_id}" data-page-size="20" data-mac-reset-type-id="{$mac_show_reset_tid}">
+        <div class="member-wrap ">
+            <div class="container ">
+                {include file="ads/ads_all"}
+                <div class="row">
+
+                    {include file="module/mac_catalog_filter_wrap_before"}
+                    {include file="module/filter"}
+                    {include file="module/mac_catalog_filter_wrap_after"}
+                    <div class="pannel mac-catalog-show__panel clearfix">
+                        <div class="mac-catalog-show__loading" data-lang="string_loading">加载中…</div>
+                        <div class="mac-catalog-show__error mac-hide" data-lang="string_load_err">加载失败，请稍后重试</div>
+                        <div class="mac-catalog-show__empty mac-hide">{include file="public/notempty"}</div>
+                        <ul class="mac-catalog-show__grid art-show-film-grid {$art_poster_class} mac-hide"></ul>
+                        <div class="mac-catalog-show__pager"></div>
                     </div>
                 </div>
             </div>
-            {if condition="$obj.type_id neq 17"}
-	        <div class="pannel">
-                <div class="art_banner">
-					<ul class="swiper-wrapper">
-					{maccms:art num="6" paging="no" type="current" order="desc" by="hits_week"}
-						{include file="widget/art_box_banner"}
-					{/maccms:art} 
-					</ul>
-					<div class="swiper-pagination"></div>
-					<div class="banner-arrow">
-						<a class="swiper-button-prev" href="javascript:;"><i class="iconfont">&#xe625;</i></a>
-						<a class="swiper-button-next" href="javascript:;"><i class="iconfont">&#xe623;</i></a>
-					</div> 
-                </div>
-            </div>
-            {/if}
-		    <div class="pannel">
-                <ul class="artlist clearfix">
-				{maccms:art num="10" paging="yes" half="3" type="current" order="desc" by="sort"}
-					{include file="widget/art_box"}
-				{/maccms:art} 
-                </ul>
-                {empty name="$__PAGING__.record_total"}
-				<div class="show_no" data-lang="string_art_nodata">抱歉！暂无数据</div>
-				{/empty}
-                {include file="widget/page"}
-            </div>
-		</div>
-		<div class="art_sider_row hidden_xs hidden_mi">
-            <div class="pannel clearfix">
-				<div class="pannel_head clearfix">
-					<h3 class="title" data-lang="string_art_hot">
-						热播影视
-					</h3>						
-				</div>
-				<ul class="ranklist_r clearfix">
-					{maccms:vod num="6" paging="no" type="all" level="9" order="desc" by="sort"}
-					{include file="widget/rank_box_text"}		
-					{/maccms:vod}
-				</ul>
-			</div>
-			<div class="pannel clearfix">
-				<div class="pannel_head clearfix">
-					<h3 class="title" data-lang="string_art_recommend">
-						推荐阅读
-					</h3>						
-				</div>
-				<ul class="art_relates clearfix">
-				        {include file="ads/ads_artlist"}
-					{maccms:art num="6" ids="'.$obj['art_rel_art'].'" order="desc" by="hits"}
-					    {include file="widget/art_box_right"}
-                    {/maccms:art}
-				</ul>
-			</div>
-	        {include file="ads/ads_artr"}
-		</div>
-   </div> 
-</div>
-   {include file="public/foot"}
+        </div>
+        <script type="text/javascript" src="{$maccms.path_tpl}/asset/js/mac-catalog-media.js"></script>
+        <script type="text/javascript" src="{$maccms.path}template/default/asset/js/mac-home-card-render.js?v=202604161"></script>
+        <script type="text/javascript" src="{$maccms.path_tpl}/asset/js/type-show.js"></script>
+        {include file="public/foot"}
+    </div>
 </body>
 
 </html>

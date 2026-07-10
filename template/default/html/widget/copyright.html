@@ -1,3 +1,5 @@
 <div class="site-copyright" role="contentinfo">
-    <p class="site-copyright__text">由苹果CMS程序支持</p>
+{if condition="!empty($tplconfig['theme']['foot']['text'])"}
+    <div class="site-copyright__text">{$tplconfig.theme.foot.text}</div>
+{/if}
 </div>

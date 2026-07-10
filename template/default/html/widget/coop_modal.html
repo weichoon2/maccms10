@@ -14,14 +14,14 @@
 			<p class="coop-modal-desc" data-lang="user_business_coop_desc">诚邀各类商务合作，包括但不限于：广告投放、内容合作、品牌推广等。欢迎与我们联系。</p>
 			<div class="coop-modal-contacts">
 				{if condition="!empty($maccms.site_email)"}
-				<a class="coop-modal-item" href="mailto:{$maccms.site_email}" title="{$maccms.site_email}">
+				<a class="coop-modal-item" href="javascript:void(0)" data-copy="{$maccms.site_email}" title="{$maccms.site_email}">
 					{include file="widget/coop_icon_mail" /}
 					<span class="coop-label" data-lang="user_email">邮箱</span>
 					<span class="coop-val">{$maccms.site_email}</span>
 				</a>
 				{/if}
 				{if condition="!empty($maccms.site_qq)"}
-				<a class="coop-modal-item coop-qq" href="javascript:void(0)" data-qq="{$maccms.site_qq}" title="QQ: {$maccms.site_qq}">
+				<a class="coop-modal-item" href="javascript:void(0)" data-copy="{$maccms.site_qq}" title="Telegram: {$maccms.site_qq}">
 					{include file="widget/coop_icon_message" /}
 					<span class="coop-label">telegram</span>
 					<span class="coop-val">{$maccms.site_qq}</span>
@@ -53,17 +53,18 @@
 		if($(e.target).closest('.coop-modal-close').length){ e.preventDefault(); closeCoopModal(); return; }
 		e.stopPropagation();
 	});
-	$(document).on('click', '.coop-modal-item.coop-qq', function(e){
+	$(document).on('click', '.coop-modal-item[data-copy]', function(e){
 		e.preventDefault();
-		var qq=$(this).data('qq');
-		if(!qq) return;
-		if(navigator.clipboard && navigator.clipboard.writeText){
-			navigator.clipboard.writeText(String(qq)).then(function(){
-				MAC.alert(typeof MAC!=='undefined'&&MAC.GetLang?MAC.GetLang('copy_success'):(localStorage.getItem('lang')==1?'Copy succeeded':"复制成功"));
-			});
-		}else{
-			var ta=document.createElement('textarea');ta.value=qq;ta.style.cssText='position:fixed;opacity:0';document.body.appendChild(ta);ta.select();document.execCommand('copy');document.body.removeChild(ta);
+		var text = $(this).attr('data-copy') || $(this).data('copy');
+		if(!text) return;
+		var done = function(){
 			MAC.alert(typeof MAC!=='undefined'&&MAC.GetLang?MAC.GetLang('copy_success'):(localStorage.getItem('lang')==1?'Copy succeeded':"复制成功"));
+		};
+		if(navigator.clipboard && navigator.clipboard.writeText){
+			navigator.clipboard.writeText(String(text)).then(done);
+		}else{
+			var ta=document.createElement('textarea');ta.value=String(text);ta.style.cssText='position:fixed;opacity:0';document.body.appendChild(ta);ta.select();document.execCommand('copy');document.body.removeChild(ta);
+			done();
 		}
 	});
 })();

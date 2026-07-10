@@ -2,7 +2,8 @@
 <html>
 <head>
     {include file="public/include"}
-    <link rel="stylesheet" type="text/css" href="{$maccms.path_tpl}/asset/css/vod-play.css?v=202606261" />
+    <link rel="stylesheet" type="text/css" href="{$maccms.path_tpl}/asset/css/vod-type.css?v=202607101" />
+    <link rel="stylesheet" type="text/css" href="{$maccms.path_tpl}/asset/css/vod-play.css?v=202607102" />
     {if condition="($obj.vod_copyright neq 1 || $GLOBALS['config']['app']['copyright_status'] neq 1) && !$obj.vod_lock && $popedom.code elt 1 && ($obj['vod_play_list'][$param['sid']]['player_info']['from'] eq 'dplayer' || $obj['vod_play_list'][$param['sid']]['player_info']['from'] eq 'videojs')"}
     <link rel="stylesheet" type="text/css" href="{$maccms.path_tpl}/asset/css/vod-play-social.css?v=202604271" />
     <link rel="stylesheet" type="text/css" href="{$maccms.path_tpl}/asset/css/vod-play-progress.css?v=202606246" />
@@ -86,11 +87,11 @@
                                             <div class="mac_ulog play_collec{if condition="$vod_play_is_fav eq 1"} is_fav{/if}" data-type="2" data-mid="{$maccms.mid}" data-id="{$obj.vod_id}"{if condition="$vod_play_is_fav eq 1"} data-uid="{$vod_play_fav_ulog_id}"{/if}><i class="iconfont">&#xe629;</i> <span data-lang="{if condition="$vod_play_is_fav eq 1"}art_fav_done{else/}string_play_sc{/if}">{if condition="$vod_play_is_fav eq 1"}已收藏{else/}收藏{/if}</span></div>
                                         </li>
                                         {/if}
-                                        <li class="play-but-item">
-                                            <a href="{$obj.player_info.link_pre}" class="{if$param.nid==1}btns_disad{/if}"><i class="iconfont pre-t">&#xe626;</i> <span data-lang="string_play_sj">上集</span></a>
+                                        <li class="play-but-item js-play-nav-item js-play-nav-item--pre"{if condition="$param.nid elt 1 || empty($obj.player_info.link_pre)"} hidden{/if}>
+                                            <a href="{$obj.player_info.link_pre|default='#'}" class="js-play-link-pre"><i class="iconfont pre-t">&#xe626;</i> <span data-lang="string_play_sj">上集</span></a>
                                         </li>
-                                        <li class="play-but-item">
-                                            <a href="{$obj.player_info.link_next}" class="{if$param.nid==$obj['vod_play_list'][$param['sid']]['url_count']}btns_disad{/if}"><span data-lang="string_play_xj">下集</span> <i class="iconfont next-p next-t">&#xe62c;</i></a>
+                                        <li class="play-but-item js-play-nav-item js-play-nav-item--next"{if condition="empty($obj['vod_play_list'][$param['sid']]['url_count']) || $param.nid egt $obj['vod_play_list'][$param['sid']]['url_count'] || empty($obj.player_info.link_next)"} hidden{/if}>
+                                            <a href="{$obj.player_info.link_next|default='#'}" class="js-play-link-next"><span data-lang="string_play_xj">下集</span> <i class="iconfont next-p next-t">&#xe62c;</i></a>
                                         </li>
                                     </ul>
                                 </div>
@@ -339,17 +340,15 @@
                         </div>
                             {/if}
                         {/if}
-                    <div class="pannel clearfix">
+                    <div class="pannel clearfix pannel--vod-related">
                         <div class="pannel_head clearfix">
-                            <h3 class="title">
-                                <span data-lang="vod_like_watch">喜欢看</span>"<span class="tj-title">{$obj.vod_name}</span>"<span data-lang="vod_also_like">的人也喜欢</span>
-                            </h3>                        
+                            <h3 class="title pannel_head__related-title">
+                                <span data-lang="vod_like_watch">喜欢看</span><span class="tj-title">{$obj.vod_name}</span><span data-lang="vod_also_like">的人也喜欢</span>
+                            </h3>
                         </div>
-                        <ul class="vodlist vodlist_wi {$type_poster_class}">
-                            {maccms:vod num="12" type="current" order="desc" by="time"}
-                            {include file="widget/vod_box"}        
-                            {/maccms:vod}
-                        </ul>
+                        <div id="js-play-like-groups" class="mac-vod-grouped-sections" data-vod-id="{$obj.vod_id}" data-type-id="{$obj.type_id}">
+                            <div class="mac-vod-grouped-skeleton home-skeleton-card"><div class="thumb"></div><div class="line w90"></div><div class="line w70"></div></div>
+                        </div>
                     </div>
                 {include file="module/vod_art"}
                 {if condition="$GLOBALS['config']['comment']['status'] eq 1"}
@@ -453,6 +452,9 @@
         <script defer src="{$maccms.path_tpl}/asset/js/vod-play-progress.js?v=202606246"></script>
         <script defer src="{$maccms.path_tpl}/asset/js/vod-play-failover.js?v=202606262"></script>
         {/if}
+        <script type="text/javascript" src="{$maccms.path}template/default/asset/js/mac-home-card-render.js?v=202604161"></script>
+        <script type="text/javascript" src="{$maccms.path}template/default/asset/js/mac-vod-related-scroller.js?v=202607102"></script>
+        <script type="text/javascript" src="{$maccms.path_tpl}/asset/js/vod-play-like.js?v=202607102"></script>
         <script type="text/javascript" src="{$maccms.path_tpl}/asset/js/vod-play-playlist.js"></script>
         {include file="module/vod_tagwall_script_js" /}
     </div>

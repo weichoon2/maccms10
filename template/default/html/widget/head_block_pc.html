@@ -13,6 +13,8 @@
                         <li data-sid="{$vo.type_id}" {if condition="($vo.type_id eq $GLOBALS['type_id'] || $vo.type_id eq $GLOBALS['type_pid'])" }class="active" {/if}>
                             {if condition="$vo.type_mid eq 12"}
                             <a href="{:mac_url('manga/index')}">{$vo.type_name}</a>
+                            {elseif condition="$vo.type_mid eq 2"/}
+                            <a href="{:mac_url('art/index')}">{$vo.type_name}</a>
                             {else/}
                             <a href="{:mac_url_type($vo)}">{$vo.type_name}</a>
                             {/if}
@@ -55,6 +57,8 @@
                             {maccms:type ids="'.($tplconfig['theme']['nav']['id'] ?? '').'" num="30" order="asc" by="sort" id="vo2" key="key"}
                             {if condition="$vo2.type_mid eq 12"}
                             <a href="{:mac_url('manga/index')}" class="top_nav_overlay_item" title="{$vo2.type_name}">{$vo2.type_name}</a>
+                            {elseif condition="$vo2.type_mid eq 2"/}
+                            <a href="{:mac_url('art/index')}" class="top_nav_overlay_item" title="{$vo2.type_name}">{$vo2.type_name}</a>
                             {else/}
                             <a href="{:mac_url_type($vo2)}" class="top_nav_overlay_item" title="{$vo2.type_name}">{$vo2.type_name}</a>
                             {/if}
