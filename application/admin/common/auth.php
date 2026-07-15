@@ -2186,4 +2186,145 @@ return array (
       ),
     ),
   ),
+  15 =>
+  array (
+    'name' => lang('menu/monitor'),
+    'icon' => 'xe621',
+    'sub' =>
+    array (
+      151 =>
+      array (
+        'show' => 1,
+        'name' => lang('menu/monitor_server'),
+        'controller' => 'monitor',
+        'action' => 'index',
+      ),
+      152 =>
+      array (
+        'show' => 1,
+        'name' => lang('menu/monitor_realtime'),
+        'controller' => 'monitor',
+        'action' => 'realtime',
+      ),
+      153 =>
+      array (
+        'show' => 1,
+        'name' => lang('menu/monitor_setting'),
+        'controller' => 'monitor',
+        'action' => 'setting',
+      ),
+      1501 =>
+      array (
+        'show' => 0,
+        'name' => '--监控曲线数据',
+        'controller' => 'monitor',
+        'action' => 'series',
+      ),
+      1502 =>
+      array (
+        'show' => 0,
+        'name' => '--监控实时数据',
+        'controller' => 'monitor',
+        'action' => 'live',
+      ),
+      1503 =>
+      array (
+        'show' => 0,
+        'name' => '--监控配置保存',
+        'controller' => 'monitor',
+        'action' => 'setting_save',
+      ),
+      1504 =>
+      array (
+        'show' => 0,
+        'name' => '--监控令牌重置',
+        'controller' => 'monitor',
+        'action' => 'cron_token_reset',
+      ),
+      154 =>
+      array (
+        'show' => 1,
+        'name' => lang('menu/monitor_rule'),
+        'controller' => 'monitor',
+        'action' => 'rule',
+      ),
+      155 =>
+      array (
+        'show' => 1,
+        'name' => lang('menu/monitor_event'),
+        'controller' => 'monitor',
+        'action' => 'event',
+      ),
+      1505 =>
+      array (
+        'show' => 0,
+        'name' => '--告警规则编辑',
+        'controller' => 'monitor',
+        'action' => 'rule_info',
+      ),
+      1506 =>
+      array (
+        'show' => 0,
+        'name' => '--告警规则保存',
+        'controller' => 'monitor',
+        'action' => 'rule_save',
+      ),
+      1507 =>
+      array (
+        'show' => 0,
+        'name' => '--告警规则删除',
+        'controller' => 'monitor',
+        'action' => 'rule_del',
+      ),
+      1508 =>
+      array (
+        'show' => 0,
+        'name' => '--告警规则状态',
+        'controller' => 'monitor',
+        'action' => 'rule_field',
+      ),
+      1509 =>
+      array (
+        'show' => 0,
+        'name' => '--启用推荐规则',
+        'controller' => 'monitor',
+        'action' => 'rule_enable_recommended',
+      ),
+      1510 =>
+      array (
+        'show' => 0,
+        'name' => '--测试推送渠道',
+        'controller' => 'monitor',
+        'action' => 'rule_test',
+      ),
+      1511 =>
+      array (
+        'show' => 0,
+        'name' => '--告警确认',
+        'controller' => 'monitor',
+        'action' => 'event_ack',
+      ),
+      156 =>
+      array (
+        'show' => 1,
+        'name' => lang('menu/monitor_access'),
+        'controller' => 'monitor',
+        'action' => 'access',
+      ),
+      1512 =>
+      array (
+        'show' => 0,
+        'name' => '--封禁IP',
+        'controller' => 'monitor',
+        'action' => 'access_ban',
+      ),
+      1513 =>
+      array (
+        'show' => 0,
+        'name' => '--解封IP',
+        'controller' => 'monitor',
+        'action' => 'access_unban',
+      ),
+    ),
+  ),
 );

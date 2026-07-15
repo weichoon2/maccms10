@@ -239,6 +239,51 @@ class Index extends Controller
             $config_new['trusted_proxies'] = '';
         }
 
+        // 监控与告警配置：全新安装写入默认值（缺失才补，与升级脚本 data/update/database.php 保持一致）
+        if (!isset($config_new['monitor']) || !is_array($config_new['monitor'])) {
+            $config_new['monitor'] = [];
+        }
+        $monitorFill = [
+            'enabled'             => '1',
+            'req_metrics_enabled' => '1',
+            'req_sample_rate'     => '100',
+            'slow_ms'             => '1000',
+            'allow_shell'         => '0',
+            'disk_mounts'         => '',
+            'retain_min_days'     => '3',
+            'retain_hour_days'    => '90',
+            'heartbeat_url'       => '',
+            'notify_user_ids'       => '',
+            'alert_emails'          => '',
+            'notify_budget_hour'    => '20',
+            'notify_max_per_run'    => '5',
+            'notify_time_budget_ms' => '8000',
+            'webhook_allow_private' => '0',
+            'access_track_enabled'  => '0',
+            'access_cc_threshold'   => '120',
+            'access_err4_threshold' => '20',
+            'access_track_max_ip'   => '300',
+            'retain_access_days'    => '30',
+            'ban_whitelist'         => '',
+            'webhook_url'           => '',
+            'webhook_secret'        => '',
+            'telegram_token'        => '',
+            'telegram_chat_id'      => '',
+            'dingtalk_token'        => '',
+            'dingtalk_secret'       => '',
+            'wecom_key'             => '',
+            'serverchan_key'        => '',
+        ];
+        foreach ($monitorFill as $m_k => $m_v) {
+            if (!isset($config_new['monitor'][$m_k])) {
+                $config_new['monitor'][$m_k] = $m_v;
+            }
+        }
+        if (!isset($config_new['monitor']['cron_token'])
+            || strlen(trim((string)$config_new['monitor']['cron_token'])) < 16) {
+            $config_new['monitor']['cron_token'] = mac_get_rndstr(32);
+        }
+
         // 更新程序配置文件
         $res = mac_arr2file(APP_PATH . 'extra/maccms.php', $config_new);
 		if ($res === false) {

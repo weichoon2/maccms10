@@ -806,6 +806,33 @@ function mac_send_mail($to,$title,$body,$conf=[])
     }
 }
 
+/**
+ * 推送告警到指定渠道。
+ *
+ * driver 定位方式与 mac_send_mail() / mac_send_sms() 保持一致：
+ * app\common\extend\push\<Channel>::submit()。
+ *
+ * @param string $channel webhook|telegram|dingtalk|wecom|serverchan
+ * @param string $title
+ * @param string $content
+ * @param array  $context 结构化字段（webhook 会原样带进 JSON）
+ * @param array  $config  monitor 配置段
+ * @return array ['code'=>1|非1,'msg'=>string]
+ */
+function mac_send_push($channel, $title, $content, array $context = [], array $config = [])
+{
+    $channel = preg_replace('/[^a-z0-9]/', '', strtolower((string)$channel));
+    if ($channel === '') {
+        return ['code' => 999, 'msg' => lang('admin/monitor/push_channel_invalid')];
+    }
+    $cp = 'app\\common\\extend\\push\\' . ucfirst($channel);
+    if (!class_exists($cp)) {
+        return ['code' => 991, 'msg' => lang('admin/monitor/push_driver_not_found')];
+    }
+    $c = new $cp;
+    return $c->submit($title, $content, $context, $config);
+}
+
 function mac_check_back_link($url)
 {
     $res=[];

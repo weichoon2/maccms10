@@ -16,11 +16,19 @@ return [
         'app\\common\\behavior\\SessionSameSite',
         'app\\common\\behavior\\Init',
         'app\\common\\behavior\\RequestSecurity',
+        // 请求埋点只在这里注册 shutdown 回调，真正的记录发生在进程结束时。
+        // 不能挂在 app_end：404/500 走异常路径，压根到不了 app_end，
+        // 那样 http.4xx / http.5xx 会永远是零（详见 MonitorRequest 的类注释）。
+        'app\\common\\behavior\\MonitorRequest',
     ],
     // 应用开始
     'app_begin'    => [
         'app\\common\\behavior\\Begin',
         'app\\common\\behavior\\CsrfGuard',
+        // IpBlock 必须排在 AntiScrape 之前：已经封掉的 IP 不必再走一遍限流计算。
+        // 没有这个行为，blacks.php 的 black_ip_list 只挡评论/弹幕/聊天，
+        // 后台的「一键封禁」对刷首页和扫描器完全无效 —— 等于摆设。
+        'app\\common\\behavior\\IpBlock',
         'app\\common\\behavior\\AntiScrape',
     ],
     // 模块初始化

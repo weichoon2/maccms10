@@ -765,6 +765,160 @@ if (empty($col_list[$pre . 'vod_audit_rule'])) {
     $sql .= ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='视频审核自动规则';";
     $sql .= "\r";
 }
+// 监控-分钟级时序指标表
+if (empty($col_list[$pre . 'monitor_metric_min'])) {
+    $sql .= "CREATE TABLE `{$pre}monitor_metric_min` (";
+    $sql .= "`metric_key` varchar(64) NOT NULL COMMENT '指标键，含维度：sys.cpu.pct / sys.disk.used_pct|/ / http.lat.b3',";
+    $sql .= "`stat_min` int(10) unsigned NOT NULL COMMENT '分钟起点 UNIX（floor(ts/60)*60）',";
+    $sql .= "`metric_type` tinyint(1) unsigned NOT NULL DEFAULT '1' COMMENT '1=gauge 2=counter',";
+    $sql .= "`metric_value` decimal(18,4) NOT NULL DEFAULT '0.0000' COMMENT '指标值',";
+    $sql .= "`updated_at` int(10) unsigned NOT NULL DEFAULT '0' COMMENT '写入时间 UNIX',";
+    $sql .= "PRIMARY KEY (`metric_key`,`stat_min`),";
+    $sql .= "KEY `idx_min` (`stat_min`)";
+    $sql .= ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='监控-分钟级时序指标';";
+    $sql .= "\r";
+}
+// 监控-小时级时序指标表
+if (empty($col_list[$pre . 'monitor_metric_hour'])) {
+    $sql .= "CREATE TABLE `{$pre}monitor_metric_hour` (";
+    $sql .= "`metric_key` varchar(64) NOT NULL COMMENT '指标键',";
+    $sql .= "`stat_hour` int(10) unsigned NOT NULL COMMENT '整点起点 UNIX',";
+    $sql .= "`metric_type` tinyint(1) unsigned NOT NULL DEFAULT '1' COMMENT '1=gauge 2=counter',";
+    $sql .= "`val_avg` decimal(18,4) NOT NULL DEFAULT '0.0000' COMMENT '该小时均值',";
+    $sql .= "`val_max` decimal(18,4) NOT NULL DEFAULT '0.0000' COMMENT '该小时峰值',";
+    $sql .= "`val_min` decimal(18,4) NOT NULL DEFAULT '0.0000' COMMENT '该小时谷值',";
+    $sql .= "`val_sum` decimal(20,4) NOT NULL DEFAULT '0.0000' COMMENT '该小时总和（counter 用）',";
+    $sql .= "`sample_cnt` smallint(5) unsigned NOT NULL DEFAULT '0' COMMENT '该小时实际落库的分钟数（<60 表示 cron 有漏跑）',";
+    $sql .= "`updated_at` int(10) unsigned NOT NULL DEFAULT '0' COMMENT '写入时间 UNIX',";
+    $sql .= "PRIMARY KEY (`metric_key`,`stat_hour`),";
+    $sql .= "KEY `idx_hour` (`stat_hour`)";
+    $sql .= ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='监控-小时级时序指标';";
+    $sql .= "\r";
+}
+// 监控-运行期状态表
+if (empty($col_list[$pre . 'monitor_state'])) {
+    $sql .= "CREATE TABLE `{$pre}monitor_state` (";
+    $sql .= "`state_key` varchar(64) NOT NULL COMMENT '状态键',";
+    $sql .= "`state_num` bigint(20) NOT NULL DEFAULT '0' COMMENT '数值槽（时间戳/累计值/计数器），用于原子 CAS',";
+    $sql .= "`state_val` varchar(1024) NOT NULL DEFAULT '' COMMENT '文本槽（JSON）',";
+    $sql .= "`updated_at` int(10) unsigned NOT NULL DEFAULT '0' COMMENT '写入时间 UNIX',";
+    $sql .= "PRIMARY KEY (`state_key`)";
+    $sql .= ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='监控-运行期状态（cron 心跳/due-gate/counter 基准/告警 pending）';";
+    $sql .= "\r";
+}
+// 监控-告警规则表
+if (empty($col_list[$pre . 'monitor_alert_rule'])) {
+    $sql .= "CREATE TABLE `{$pre}monitor_alert_rule` (";
+    $sql .= "`rule_id` int(10) unsigned NOT NULL AUTO_INCREMENT,";
+    $sql .= "`rule_name` varchar(100) NOT NULL DEFAULT '' COMMENT '规则名称',";
+    $sql .= "`rule_status` tinyint(1) unsigned NOT NULL DEFAULT '0' COMMENT '0停用 1启用',";
+    $sql .= "`rule_source` varchar(16) NOT NULL DEFAULT 'metric' COMMENT '数据源 metric|analytics',";
+    $sql .= "`rule_metric` varchar(64) NOT NULL DEFAULT '' COMMENT '指标键',";
+    $sql .= "`rule_agg` varchar(8) NOT NULL DEFAULT 'avg' COMMENT 'avg|max|min|sum|last|p95',";
+    $sql .= "`rule_window_min` smallint(5) unsigned NOT NULL DEFAULT '5' COMMENT '评估窗口(分钟)',";
+    $sql .= "`rule_op` varchar(4) NOT NULL DEFAULT 'gt' COMMENT 'gt|gte|lt|lte',";
+    $sql .= "`rule_threshold` decimal(18,4) NOT NULL DEFAULT '0.0000' COMMENT '阈值',";
+    $sql .= "`rule_for_min` smallint(5) unsigned NOT NULL DEFAULT '3' COMMENT '持续N分钟才触发',";
+    $sql .= "`rule_severity` tinyint(1) unsigned NOT NULL DEFAULT '2' COMMENT '1提示 2警告 3严重',";
+    $sql .= "`rule_silence_min` smallint(5) unsigned NOT NULL DEFAULT '30' COMMENT '同一事件重复通知的最小间隔(分钟)',";
+    $sql .= "`rule_recover_min` smallint(5) unsigned NOT NULL DEFAULT '3' COMMENT '连续N分钟不满足才判恢复',";
+    $sql .= "`rule_channels` varchar(255) NOT NULL DEFAULT '' COMMENT '逗号分隔 notify,email,webhook,telegram,dingtalk,wecom,serverchan',";
+    $sql .= "`rule_detect_mode` varchar(16) NOT NULL DEFAULT 'threshold' COMMENT 'threshold|yoy|mom|zscore|zerodrop',";
+    $sql .= "`rule_detect_param` varchar(500) NOT NULL DEFAULT '' COMMENT 'JSON 检测参数',";
+    $sql .= "`rule_time_add` int(10) unsigned NOT NULL DEFAULT '0',";
+    $sql .= "`rule_time` int(10) unsigned NOT NULL DEFAULT '0',";
+    $sql .= "PRIMARY KEY (`rule_id`),";
+    $sql .= "KEY `idx_status_source` (`rule_status`,`rule_source`)";
+    $sql .= ") ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8mb4 COMMENT='监控-告警规则';";
+    $sql .= "\r";
+    // 推荐规则种子。只在建表时插入 —— 表已存在就跳过，天然幂等，
+    // 绝不会覆盖站长后来调整过的阈值。默认全部停用（rule_status=0）：
+    // 阈值高度依赖具体机器配置，强行默认启用只会制造噪音。
+    $sql .= "INSERT INTO `{$pre}monitor_alert_rule` (`rule_name`,`rule_status`,`rule_source`,`rule_metric`,`rule_agg`,`rule_window_min`,`rule_op`,`rule_threshold`,`rule_for_min`,`rule_severity`,`rule_silence_min`,`rule_recover_min`,`rule_channels`,`rule_detect_mode`) VALUES ";
+    $sql .= "('CPU 持续高负载',0,'metric','sys.cpu.pct','avg',5,'gt',85.0000,5,2,30,3,'notify','threshold'),";
+    $sql .= "('内存即将耗尽',0,'metric','sys.mem.used_pct','avg',5,'gt',90.0000,5,3,30,3,'notify','threshold'),";
+    $sql .= "('磁盘即将写满',0,'metric','sys.disk.used_pct|/','last',1,'gt',90.0000,1,3,60,3,'notify','threshold'),";
+    $sql .= "('5xx 错误突增',0,'metric','http.5xx','sum',5,'gt',20.0000,2,3,15,3,'notify','threshold'),";
+    $sql .= "('P95 延迟劣化',0,'metric','http.lat','p95',10,'gt',2000.0000,5,2,30,3,'notify','threshold'),";
+    $sql .= "('MySQL 连接数过高',0,'metric','db.threads_connected','max',5,'gt',100.0000,3,2,30,3,'notify','threshold'),";
+    $sql .= "('慢查询激增',0,'metric','db.slow_queries','sum',10,'gt',50.0000,5,2,30,3,'notify','threshold'),";
+    $sql .= "('PHP-FPM 队列积压',0,'metric','php.fpm.queue','max',5,'gt',20.0000,3,2,30,3,'notify','threshold');";
+    $sql .= "\r";
+}
+// 监控-告警事件表
+// uk_active(event_fingerprint, event_end_ts) 是本设计的关键：
+// 活跃事件 end_ts=0，所以同一指纹最多只能有一条活跃事件 —— 由数据库而非 PHP 保证。
+// 就算 cron 叠跑或站长手动重打，也绝不可能开出两个重复告警。
+if (empty($col_list[$pre . 'monitor_alert_event'])) {
+    $sql .= "CREATE TABLE `{$pre}monitor_alert_event` (";
+    $sql .= "`event_id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,";
+    $sql .= "`rule_id` int(10) unsigned NOT NULL DEFAULT '0',";
+    $sql .= "`rule_name` varchar(100) NOT NULL DEFAULT '' COMMENT '规则名快照，规则删除后历史仍可读',";
+    $sql .= "`event_metric` varchar(64) NOT NULL DEFAULT '',";
+    $sql .= "`event_severity` tinyint(1) unsigned NOT NULL DEFAULT '2',";
+    $sql .= "`event_status` tinyint(1) unsigned NOT NULL DEFAULT '1' COMMENT '1触发中 2已恢复 3已确认',";
+    $sql .= "`event_value` decimal(18,4) NOT NULL DEFAULT '0.0000' COMMENT '触发时的实际值',";
+    $sql .= "`event_baseline` decimal(18,4) NOT NULL DEFAULT '0.0000' COMMENT '基线值(数据异常检测用)',";
+    $sql .= "`event_threshold` decimal(18,4) NOT NULL DEFAULT '0.0000',";
+    $sql .= "`event_summary` varchar(500) NOT NULL DEFAULT '',";
+    $sql .= "`event_fingerprint` char(32) NOT NULL DEFAULT '' COMMENT 'md5(rule_id|metric|dim)',";
+    $sql .= "`event_start_ts` int(10) unsigned NOT NULL DEFAULT '0',";
+    $sql .= "`event_last_ts` int(10) unsigned NOT NULL DEFAULT '0' COMMENT '最近一次仍满足条件',";
+    $sql .= "`event_end_ts` int(10) unsigned NOT NULL DEFAULT '0' COMMENT '0=活跃中；>0=恢复时间',";
+    $sql .= "`event_notify_ts` int(10) unsigned NOT NULL DEFAULT '0' COMMENT '上次外发通知时间',";
+    $sql .= "`event_notify_cnt` smallint(5) unsigned NOT NULL DEFAULT '0',";
+    $sql .= "`event_notify_result` varchar(500) NOT NULL DEFAULT '',";
+    $sql .= "PRIMARY KEY (`event_id`),";
+    $sql .= "UNIQUE KEY `uk_active` (`event_fingerprint`,`event_end_ts`),";
+    $sql .= "KEY `idx_rule_start` (`rule_id`,`event_start_ts`),";
+    $sql .= "KEY `idx_status_start` (`event_status`,`event_start_ts`)";
+    $sql .= ") ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8mb4 COMMENT='监控-告警事件';";
+    $sql .= "\r";
+}
+// 监控-异常访问表（IP × 分钟聚合）
+// 只落库「已达可疑阈值」的 IP：正常 IP 一行都不写。
+if (empty($col_list[$pre . 'monitor_abnormal_access'])) {
+    $sql .= "CREATE TABLE `{$pre}monitor_abnormal_access` (";
+    $sql .= "`access_id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,";
+    $sql .= "`access_ip` varchar(45) NOT NULL DEFAULT '' COMMENT '来源IP，__overflow 表示超出追踪基数的聚合项',";
+    $sql .= "`stat_min` int(10) unsigned NOT NULL DEFAULT '0' COMMENT '分钟起点 UNIX',";
+    $sql .= "`hit_cnt` int(10) unsigned NOT NULL DEFAULT '0' COMMENT '该分钟该IP总请求数',";
+    $sql .= "`err4_cnt` int(10) unsigned NOT NULL DEFAULT '0' COMMENT '4xx 次数',";
+    $sql .= "`err5_cnt` int(10) unsigned NOT NULL DEFAULT '0' COMMENT '5xx 次数',";
+    $sql .= "`scan_cnt` int(10) unsigned NOT NULL DEFAULT '0' COMMENT '命中扫描路径特征次数',";
+    $sql .= "`bad_ua_cnt` int(10) unsigned NOT NULL DEFAULT '0' COMMENT 'UA为空或命中扫描器特征次数',";
+    $sql .= "`blocked_cnt` int(10) unsigned NOT NULL DEFAULT '0' COMMENT '被防爬虫限流拦截(429)次数',";
+    $sql .= "`risk_score` tinyint(3) unsigned NOT NULL DEFAULT '0' COMMENT '风险分 0-100',";
+    $sql .= "`access_level` tinyint(1) unsigned NOT NULL DEFAULT '0' COMMENT '0低 1中 2高',";
+    $sql .= "`last_ua` varchar(255) NOT NULL DEFAULT '',";
+    $sql .= "`last_path` varchar(255) NOT NULL DEFAULT '',";
+    $sql .= "`updated_at` int(10) unsigned NOT NULL DEFAULT '0',";
+    $sql .= "PRIMARY KEY (`access_id`),";
+    $sql .= "UNIQUE KEY `uk_ip_min` (`access_ip`,`stat_min`),";
+    $sql .= "KEY `idx_min_level` (`stat_min`,`access_level`),";
+    $sql .= "KEY `idx_score` (`risk_score`)";
+    $sql .= ") ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8mb4 COMMENT='监控-异常访问(IP×分钟聚合)';";
+    $sql .= "\r";
+    // 异常访问的推荐规则。用的是 sec.* 派生指标 —— 由 AbnormalAccessDetector 写回
+    // metric_min，于是完全复用告警引擎，一行新的告警逻辑都不用写。
+    $sql .= "INSERT INTO `{$pre}monitor_alert_rule` (`rule_name`,`rule_status`,`rule_source`,`rule_metric`,`rule_agg`,`rule_window_min`,`rule_op`,`rule_threshold`,`rule_for_min`,`rule_severity`,`rule_silence_min`,`rule_recover_min`,`rule_channels`,`rule_detect_mode`) VALUES ";
+    $sql .= "('CC 攻击嫌疑',0,'metric','sec.cc_max_hits','max',3,'gt',500.0000,0,3,15,3,'notify','threshold'),";
+    $sql .= "('扫描器活动',0,'metric','sec.scan_hits','sum',10,'gt',50.0000,0,2,60,3,'notify','threshold'),";
+    $sql .= "('高危 IP 增多',0,'metric','sec.abnormal_ip_high','max',5,'gt',5.0000,2,2,30,3,'notify','threshold'),";
+    $sql .= "('4xx 错误突增',0,'metric','http.4xx','sum',5,'gt',500.0000,2,2,30,3,'notify','threshold');";
+    $sql .= "\r";
+    // 运营数据异常检测的推荐规则。rule_source='analytics' 走 AnalyticsAnomaly 取数与判定，
+    // 其余（触发/静默/恢复/通知/熔断/预算）完全复用同一套告警引擎。
+    $sql .= "INSERT INTO `{$pre}monitor_alert_rule` (`rule_name`,`rule_status`,`rule_source`,`rule_metric`,`rule_agg`,`rule_window_min`,`rule_op`,`rule_threshold`,`rule_for_min`,`rule_severity`,`rule_silence_min`,`rule_recover_min`,`rule_channels`,`rule_detect_mode`,`rule_detect_param`) VALUES ";
+    $sql .= "('订单掉零',0,'analytics','analytics.order_cnt','last',60,'lt',0.0000,0,3,120,60,'notify','zerodrop','{\"baseline_days\":14,\"min_sample\":7,\"min_abs\":3}'),";
+    $sql .= "('充值金额掉零',0,'analytics','analytics.recharge_amount','last',1440,'lt',0.0000,0,3,720,720,'notify','zerodrop','{\"baseline_days\":14,\"min_sample\":7,\"min_abs\":10}'),";
+    $sql .= "('订单量异常下滑',0,'analytics','analytics.order_cnt','last',60,'lt',0.0000,0,2,120,60,'notify','zscore','{\"k\":3,\"baseline_days\":14,\"min_sample\":7,\"min_abs\":3}'),";
+    $sql .= "('PV 异常暴跌',0,'analytics','analytics.pv','last',60,'lt',0.0000,0,2,120,60,'notify','zscore','{\"k\":3,\"baseline_days\":14,\"min_sample\":7,\"min_abs\":50}'),";
+    $sql .= "('PV 异常暴涨',0,'analytics','analytics.pv','last',60,'gt',0.0000,0,1,120,60,'notify','zscore','{\"k\":4,\"baseline_days\":14,\"min_sample\":7,\"min_abs\":50}'),";
+    $sql .= "('UV 异常暴跌',0,'analytics','analytics.uv','last',60,'lt',0.0000,0,2,120,60,'notify','zscore','{\"k\":3,\"baseline_days\":14,\"min_sample\":7,\"min_abs\":30}'),";
+    $sql .= "('跳出率飙升',0,'analytics','analytics.bounce_rate','last',1440,'gt',0.0000,0,2,720,720,'notify','zscore','{\"k\":3,\"baseline_days\":14,\"min_sample\":7,\"min_abs\":10}');";
+    $sql .= "\r";
+}
 
 // AI 搜索反滥用配置注入（漏洞 12）：require_login / anon_captcha_after /
 // daily_budget / llm_call_cap / circuit_fail_threshold / circuit_hold_seconds，
@@ -795,6 +949,69 @@ if (empty($col_list[$pre . 'vod_audit_rule'])) {
             }
             if (!isset($config['trusted_proxies'])) {
                 $config['trusted_proxies'] = '';
+                $changed = true;
+            }
+            if ($changed) {
+                mac_arr2file($file, $config);
+            }
+        }
+    }
+}
+
+// 监控与告警配置注入：enabled / cron_token / 请求埋点开关 / 保留期 等。
+// 幂等：只补缺失键，不覆盖站长已设值；cron_token 仅在缺失或过短时生成
+// （每次升级都换 token 会让站长已配置的 crontab 直接失效）。
+{
+    $file = APP_PATH . 'extra/maccms.php';
+    if (is_file($file)) {
+        @chmod($file, 0777);
+        $config = config('maccms');
+        if (is_array($config)) {
+            $changed = false;
+            if (!isset($config['monitor']) || !is_array($config['monitor'])) {
+                $config['monitor'] = [];
+                $changed = true;
+            }
+            $monitorFill = [
+                'enabled'               => '1',
+                'req_metrics_enabled'   => '1',
+                'req_sample_rate'       => '100',
+                'slow_ms'               => '1000',
+                'allow_shell'           => '0',
+                'disk_mounts'           => '',
+                'retain_min_days'       => '3',
+                'retain_hour_days'      => '90',
+                'heartbeat_url'         => '',
+                'notify_user_ids'       => '',
+                'alert_emails'          => '',
+                'notify_budget_hour'    => '20',
+                'notify_max_per_run'    => '5',
+                'notify_time_budget_ms' => '8000',
+                'webhook_allow_private' => '0',
+                'access_track_enabled'  => '0',
+                'access_cc_threshold'   => '120',
+                'access_err4_threshold' => '20',
+                'access_track_max_ip'   => '300',
+                'retain_access_days'    => '30',
+                'ban_whitelist'         => '',
+                'webhook_url'           => '',
+                'webhook_secret'        => '',
+                'telegram_token'        => '',
+                'telegram_chat_id'      => '',
+                'dingtalk_token'        => '',
+                'dingtalk_secret'       => '',
+                'wecom_key'             => '',
+                'serverchan_key'        => '',
+            ];
+            foreach ($monitorFill as $m_k => $m_v) {
+                if (!isset($config['monitor'][$m_k])) {
+                    $config['monitor'][$m_k] = $m_v;
+                    $changed = true;
+                }
+            }
+            if (!isset($config['monitor']['cron_token'])
+                || strlen(trim((string)$config['monitor']['cron_token'])) < 16) {
+                $config['monitor']['cron_token'] = mac_get_rndstr(32);
                 $changed = true;
             }
             if ($changed) {

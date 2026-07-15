@@ -1757,3 +1757,169 @@ INSERT INTO `mac_live` (`cate_id`,`live_name`,`live_en`,`live_url`,`live_play_fr
 (1,'CCTV-14 少儿','cctv14','HD$https://pili-live-hls.cntv.myqcloud.com/live/cctv14hd.m3u8','hls',1,106,0,0,'CCTV-14 少儿频道 中央电视台官方直播'),
 (1,'CCTV-15 音乐','cctv15','HD$https://pili-live-hls.cntv.myqcloud.com/live/cctv15hd.m3u8','hls',1,105,0,0,'CCTV-15 音乐频道 中央电视台官方直播'),
 (1,'CCTV-17 农业农村','cctv17','HD$https://pili-live-hls.cntv.myqcloud.com/live/cctv17hd.m3u8','hls',1,104,0,0,'CCTV-17 农业农村频道 中央电视台官方直播');
+
+
+-- -----------------------------------------------------------------------------
+-- Table structure for mac_monitor_metric_min
+-- -----------------------------------------------------------------------------
+DROP TABLE IF EXISTS `mac_monitor_metric_min`;
+CREATE TABLE `mac_monitor_metric_min` (
+  `metric_key` varchar(64) NOT NULL COMMENT '指标键，含维度：sys.cpu.pct / sys.disk.used_pct|/ / http.lat.b3',
+  `stat_min` int(10) unsigned NOT NULL COMMENT '分钟起点 UNIX（floor(ts/60)*60）',
+  `metric_type` tinyint(1) unsigned NOT NULL DEFAULT '1' COMMENT '1=gauge 2=counter',
+  `metric_value` decimal(18,4) NOT NULL DEFAULT '0.0000' COMMENT '指标值',
+  `updated_at` int(10) unsigned NOT NULL DEFAULT '0' COMMENT '写入时间 UNIX',
+  PRIMARY KEY (`metric_key`,`stat_min`),
+  KEY `idx_min` (`stat_min`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='监控-分钟级时序指标';
+
+
+-- -----------------------------------------------------------------------------
+-- Table structure for mac_monitor_metric_hour
+-- -----------------------------------------------------------------------------
+DROP TABLE IF EXISTS `mac_monitor_metric_hour`;
+CREATE TABLE `mac_monitor_metric_hour` (
+  `metric_key` varchar(64) NOT NULL COMMENT '指标键',
+  `stat_hour` int(10) unsigned NOT NULL COMMENT '整点起点 UNIX',
+  `metric_type` tinyint(1) unsigned NOT NULL DEFAULT '1' COMMENT '1=gauge 2=counter',
+  `val_avg` decimal(18,4) NOT NULL DEFAULT '0.0000' COMMENT '该小时均值',
+  `val_max` decimal(18,4) NOT NULL DEFAULT '0.0000' COMMENT '该小时峰值',
+  `val_min` decimal(18,4) NOT NULL DEFAULT '0.0000' COMMENT '该小时谷值',
+  `val_sum` decimal(20,4) NOT NULL DEFAULT '0.0000' COMMENT '该小时总和（counter 用）',
+  `sample_cnt` smallint(5) unsigned NOT NULL DEFAULT '0' COMMENT '该小时实际落库的分钟数（<60 表示 cron 有漏跑）',
+  `updated_at` int(10) unsigned NOT NULL DEFAULT '0' COMMENT '写入时间 UNIX',
+  PRIMARY KEY (`metric_key`,`stat_hour`),
+  KEY `idx_hour` (`stat_hour`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='监控-小时级时序指标';
+
+
+-- -----------------------------------------------------------------------------
+-- Table structure for mac_monitor_state
+-- -----------------------------------------------------------------------------
+DROP TABLE IF EXISTS `mac_monitor_state`;
+CREATE TABLE `mac_monitor_state` (
+  `state_key` varchar(64) NOT NULL COMMENT '状态键',
+  `state_num` bigint(20) NOT NULL DEFAULT '0' COMMENT '数值槽（时间戳/累计值/计数器），用于原子 CAS',
+  `state_val` varchar(1024) NOT NULL DEFAULT '' COMMENT '文本槽（JSON）',
+  `updated_at` int(10) unsigned NOT NULL DEFAULT '0' COMMENT '写入时间 UNIX',
+  PRIMARY KEY (`state_key`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='监控-运行期状态（cron 心跳/due-gate/counter 基准/告警 pending）';
+
+
+-- -----------------------------------------------------------------------------
+-- Table structure for mac_monitor_alert_rule
+-- -----------------------------------------------------------------------------
+DROP TABLE IF EXISTS `mac_monitor_alert_rule`;
+CREATE TABLE `mac_monitor_alert_rule` (
+  `rule_id` int(10) unsigned NOT NULL AUTO_INCREMENT,
+  `rule_name` varchar(100) NOT NULL DEFAULT '' COMMENT '规则名称',
+  `rule_status` tinyint(1) unsigned NOT NULL DEFAULT '0' COMMENT '0停用 1启用',
+  `rule_source` varchar(16) NOT NULL DEFAULT 'metric' COMMENT '数据源 metric|analytics',
+  `rule_metric` varchar(64) NOT NULL DEFAULT '' COMMENT '指标键',
+  `rule_agg` varchar(8) NOT NULL DEFAULT 'avg' COMMENT 'avg|max|min|sum|last|p95',
+  `rule_window_min` smallint(5) unsigned NOT NULL DEFAULT '5' COMMENT '评估窗口(分钟)',
+  `rule_op` varchar(4) NOT NULL DEFAULT 'gt' COMMENT 'gt|gte|lt|lte',
+  `rule_threshold` decimal(18,4) NOT NULL DEFAULT '0.0000' COMMENT '阈值',
+  `rule_for_min` smallint(5) unsigned NOT NULL DEFAULT '3' COMMENT '持续N分钟才触发',
+  `rule_severity` tinyint(1) unsigned NOT NULL DEFAULT '2' COMMENT '1提示 2警告 3严重',
+  `rule_silence_min` smallint(5) unsigned NOT NULL DEFAULT '30' COMMENT '同一事件重复通知的最小间隔(分钟)',
+  `rule_recover_min` smallint(5) unsigned NOT NULL DEFAULT '3' COMMENT '连续N分钟不满足才判恢复',
+  `rule_channels` varchar(255) NOT NULL DEFAULT '' COMMENT '逗号分隔 notify,email,webhook,telegram,dingtalk,wecom,serverchan',
+  `rule_detect_mode` varchar(16) NOT NULL DEFAULT 'threshold' COMMENT 'threshold|yoy|mom|zscore|zerodrop',
+  `rule_detect_param` varchar(500) NOT NULL DEFAULT '' COMMENT 'JSON 检测参数',
+  `rule_time_add` int(10) unsigned NOT NULL DEFAULT '0',
+  `rule_time` int(10) unsigned NOT NULL DEFAULT '0',
+  PRIMARY KEY (`rule_id`),
+  KEY `idx_status_source` (`rule_status`,`rule_source`)
+) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8mb4 COMMENT='监控-告警规则';
+
+
+-- -----------------------------------------------------------------------------
+-- Table structure for mac_monitor_alert_event
+-- -----------------------------------------------------------------------------
+DROP TABLE IF EXISTS `mac_monitor_alert_event`;
+CREATE TABLE `mac_monitor_alert_event` (
+  `event_id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `rule_id` int(10) unsigned NOT NULL DEFAULT '0',
+  `rule_name` varchar(100) NOT NULL DEFAULT '' COMMENT '规则名快照，规则删除后历史仍可读',
+  `event_metric` varchar(64) NOT NULL DEFAULT '',
+  `event_severity` tinyint(1) unsigned NOT NULL DEFAULT '2',
+  `event_status` tinyint(1) unsigned NOT NULL DEFAULT '1' COMMENT '1触发中 2已恢复 3已确认',
+  `event_value` decimal(18,4) NOT NULL DEFAULT '0.0000' COMMENT '触发时的实际值',
+  `event_baseline` decimal(18,4) NOT NULL DEFAULT '0.0000' COMMENT '基线值(数据异常检测用)',
+  `event_threshold` decimal(18,4) NOT NULL DEFAULT '0.0000',
+  `event_summary` varchar(500) NOT NULL DEFAULT '',
+  `event_fingerprint` char(32) NOT NULL DEFAULT '' COMMENT 'md5(rule_id|metric|dim)',
+  `event_start_ts` int(10) unsigned NOT NULL DEFAULT '0',
+  `event_last_ts` int(10) unsigned NOT NULL DEFAULT '0' COMMENT '最近一次仍满足条件',
+  `event_end_ts` int(10) unsigned NOT NULL DEFAULT '0' COMMENT '0=活跃中；>0=恢复时间',
+  `event_notify_ts` int(10) unsigned NOT NULL DEFAULT '0' COMMENT '上次外发通知时间',
+  `event_notify_cnt` smallint(5) unsigned NOT NULL DEFAULT '0',
+  `event_notify_result` varchar(500) NOT NULL DEFAULT '',
+  PRIMARY KEY (`event_id`),
+  UNIQUE KEY `uk_active` (`event_fingerprint`,`event_end_ts`),
+  KEY `idx_rule_start` (`rule_id`,`event_start_ts`),
+  KEY `idx_status_start` (`event_status`,`event_start_ts`)
+) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8mb4 COMMENT='监控-告警事件';
+
+-- 推荐告警规则种子。默认全部停用（rule_status=0）：
+-- 阈值高度依赖具体机器配置，强行默认启用只会制造噪音。
+-- 后台提供「一键启用推荐规则」按钮。
+INSERT INTO `mac_monitor_alert_rule` (`rule_name`,`rule_status`,`rule_source`,`rule_metric`,`rule_agg`,`rule_window_min`,`rule_op`,`rule_threshold`,`rule_for_min`,`rule_severity`,`rule_silence_min`,`rule_recover_min`,`rule_channels`,`rule_detect_mode`) VALUES
+('CPU 持续高负载',0,'metric','sys.cpu.pct','avg',5,'gt',85.0000,5,2,30,3,'notify','threshold'),
+('内存即将耗尽',0,'metric','sys.mem.used_pct','avg',5,'gt',90.0000,5,3,30,3,'notify','threshold'),
+('磁盘即将写满',0,'metric','sys.disk.used_pct|/','last',1,'gt',90.0000,1,3,60,3,'notify','threshold'),
+('5xx 错误突增',0,'metric','http.5xx','sum',5,'gt',20.0000,2,3,15,3,'notify','threshold'),
+('P95 延迟劣化',0,'metric','http.lat','p95',10,'gt',2000.0000,5,2,30,3,'notify','threshold'),
+('MySQL 连接数过高',0,'metric','db.threads_connected','max',5,'gt',100.0000,3,2,30,3,'notify','threshold'),
+('慢查询激增',0,'metric','db.slow_queries','sum',10,'gt',50.0000,5,2,30,3,'notify','threshold'),
+('PHP-FPM 队列积压',0,'metric','php.fpm.queue','max',5,'gt',20.0000,3,2,30,3,'notify','threshold');
+
+
+-- -----------------------------------------------------------------------------
+-- Table structure for mac_monitor_abnormal_access
+-- 只落库「已达可疑阈值」的 IP：正常 IP 一行都不写。
+-- 这是「请求路径零 DB 写入」红线的延伸 —— 也绝不「每 IP 每分钟写一行」。
+-- -----------------------------------------------------------------------------
+DROP TABLE IF EXISTS `mac_monitor_abnormal_access`;
+CREATE TABLE `mac_monitor_abnormal_access` (
+  `access_id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `access_ip` varchar(45) NOT NULL DEFAULT '' COMMENT '来源IP，__overflow 表示超出追踪基数的聚合项',
+  `stat_min` int(10) unsigned NOT NULL DEFAULT '0' COMMENT '分钟起点 UNIX',
+  `hit_cnt` int(10) unsigned NOT NULL DEFAULT '0' COMMENT '该分钟该IP总请求数',
+  `err4_cnt` int(10) unsigned NOT NULL DEFAULT '0' COMMENT '4xx 次数',
+  `err5_cnt` int(10) unsigned NOT NULL DEFAULT '0' COMMENT '5xx 次数',
+  `scan_cnt` int(10) unsigned NOT NULL DEFAULT '0' COMMENT '命中扫描路径特征次数',
+  `bad_ua_cnt` int(10) unsigned NOT NULL DEFAULT '0' COMMENT 'UA为空或命中扫描器特征次数',
+  `blocked_cnt` int(10) unsigned NOT NULL DEFAULT '0' COMMENT '被防爬虫限流拦截(429)次数',
+  `risk_score` tinyint(3) unsigned NOT NULL DEFAULT '0' COMMENT '风险分 0-100',
+  `access_level` tinyint(1) unsigned NOT NULL DEFAULT '0' COMMENT '0低 1中 2高',
+  `last_ua` varchar(255) NOT NULL DEFAULT '',
+  `last_path` varchar(255) NOT NULL DEFAULT '',
+  `updated_at` int(10) unsigned NOT NULL DEFAULT '0',
+  PRIMARY KEY (`access_id`),
+  UNIQUE KEY `uk_ip_min` (`access_ip`,`stat_min`),
+  KEY `idx_min_level` (`stat_min`,`access_level`),
+  KEY `idx_score` (`risk_score`)
+) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8mb4 COMMENT='监控-异常访问(IP×分钟聚合)';
+
+-- 异常访问的推荐告警规则。同样默认停用。
+-- 注意这些规则用的是 sec.* 派生指标 —— 它们由 AbnormalAccessDetector 写回
+-- mac_monitor_metric_min，于是完全复用 P2 的规则引擎，一行新的告警逻辑都不用写。
+INSERT INTO `mac_monitor_alert_rule` (`rule_name`,`rule_status`,`rule_source`,`rule_metric`,`rule_agg`,`rule_window_min`,`rule_op`,`rule_threshold`,`rule_for_min`,`rule_severity`,`rule_silence_min`,`rule_recover_min`,`rule_channels`,`rule_detect_mode`) VALUES
+('CC 攻击嫌疑',0,'metric','sec.cc_max_hits','max',3,'gt',500.0000,0,3,15,3,'notify','threshold'),
+('扫描器活动',0,'metric','sec.scan_hits','sum',10,'gt',50.0000,0,2,60,3,'notify','threshold'),
+('高危 IP 增多',0,'metric','sec.abnormal_ip_high','max',5,'gt',5.0000,2,2,30,3,'notify','threshold'),
+('4xx 错误突增',0,'metric','http.4xx','sum',5,'gt',500.0000,2,2,30,3,'notify','threshold');
+
+-- 运营数据异常检测的推荐规则。同样默认停用。
+-- rule_source='analytics' 走 AnalyticsAnomaly 取数与判定，
+-- 其余（触发/静默/恢复/通知/熔断/预算）完全复用同一套告警引擎。
+INSERT INTO `mac_monitor_alert_rule` (`rule_name`,`rule_status`,`rule_source`,`rule_metric`,`rule_agg`,`rule_window_min`,`rule_op`,`rule_threshold`,`rule_for_min`,`rule_severity`,`rule_silence_min`,`rule_recover_min`,`rule_channels`,`rule_detect_mode`,`rule_detect_param`) VALUES
+('订单掉零',0,'analytics','analytics.order_cnt','last',60,'lt',0.0000,0,3,120,60,'notify','zerodrop','{"baseline_days":14,"min_sample":7,"min_abs":3}'),
+('充值金额掉零',0,'analytics','analytics.recharge_amount','last',1440,'lt',0.0000,0,3,720,720,'notify','zerodrop','{"baseline_days":14,"min_sample":7,"min_abs":10}'),
+('订单量异常下滑',0,'analytics','analytics.order_cnt','last',60,'lt',0.0000,0,2,120,60,'notify','zscore','{"k":3,"baseline_days":14,"min_sample":7,"min_abs":3}'),
+('PV 异常暴跌',0,'analytics','analytics.pv','last',60,'lt',0.0000,0,2,120,60,'notify','zscore','{"k":3,"baseline_days":14,"min_sample":7,"min_abs":50}'),
+('PV 异常暴涨',0,'analytics','analytics.pv','last',60,'gt',0.0000,0,1,120,60,'notify','zscore','{"k":4,"baseline_days":14,"min_sample":7,"min_abs":50}'),
+('UV 异常暴跌',0,'analytics','analytics.uv','last',60,'lt',0.0000,0,2,120,60,'notify','zscore','{"k":3,"baseline_days":14,"min_sample":7,"min_abs":30}'),
+('跳出率飙升',0,'analytics','analytics.bounce_rate','last',1440,'gt',0.0000,0,2,720,720,'notify','zscore','{"k":3,"baseline_days":14,"min_sample":7,"min_abs":10}');
