@@ -54,7 +54,10 @@ class Database extends Base
             $list = Db::query("SHOW TABLE STATUS");
         }
 
+        $storage = $this->getUploadStorageInfo();
         $this->assign('list',$list);
+        $this->assign('upload_storage_ready', $storage['ready']);
+        $this->assign('upload_storage_mode', $storage['mode_name']);
         $this->assign('title',lang('admin/database/title'));
         return $this->fetch('admin@database/'.$group);
     }
@@ -110,6 +113,8 @@ class Database extends Base
                 'part' => 1,
             ];
 
+            $uploadStorage = input('upload_storage/d', 0);
+
             // 创建备份文件
             $database = new dbOper($file, $config);
             if($database->create() !== false) {
@@ -118,6 +123,7 @@ class Database extends Base
                     $start = $database->backup($table, $start);
                     while (0 !== $start) {
                         if (false === $start) {
+                            @unlink($lock);
                             return $this->error(lang('admin/database/backup_err'));
                         }
                         $start = $database->backup($table, $start[0]);
@@ -125,10 +131,42 @@ class Database extends Base
                 }
                 // 备份完成，删除锁定文件
                 unlink($lock);
+            } else {
+                @unlink($lock);
+                return $this->error(lang('admin/database/backup_err'));
+            }
+
+            if ($uploadStorage) {
+                $uploadRes = $this->uploadBackupByName($file['name']);
+                if ($uploadRes['code'] !== 1) {
+                    // msg 已是脱敏后的完整文案，避免再套一层泄露细节
+                    return $this->success(lang('admin/database/backup_ok') . ' ' . $uploadRes['msg']);
+                }
+                return $this->success(lang('admin/database/backup_ok_uploaded'));
             }
             return $this->success(lang('admin/database/backup_ok'));
         }
         return $this->error(lang('admin/database/backup_err'));
+    }
+
+    /**
+     * 将已有本地备份上传到当前配置的对象存储
+     */
+    public function uploadStorage($id = '')
+    {
+        $id = intval($id);
+        if ($id <= 0) {
+            return $this->error(lang('admin/database/select_file'));
+        }
+        $name = date('Ymd-His', $id);
+        if (!preg_match('/^\d{8}-\d{6}$/', $name)) {
+            return $this->error(lang('admin/database/select_file'));
+        }
+        $res = $this->uploadBackupByName($name);
+        if ($res['code'] !== 1) {
+            return $this->error($res['msg']);
+        }
+        return $this->success(lang('admin/database/upload_storage_ok'));
     }
 
     /**
@@ -341,6 +379,119 @@ class Database extends Base
             }
         }
         return false;
+    }
+
+    /**
+     * 备份容灾仅走 S3 兼容接口（含 MinIO / OSS），避免公开图床桶误传 SQL
+     */
+    private function getUploadStorageInfo()
+    {
+        $config = (array)config('maccms.upload');
+        $mode = isset($config['mode']) ? strtolower((string)$config['mode']) : 'local';
+        $s3 = isset($config['api']['s3']) && is_array($config['api']['s3']) ? $config['api']['s3'] : [];
+        $ready = ($mode === 's3'
+            && !empty($s3['bucket'])
+            && !empty($s3['accesskey'])
+            && !empty($s3['secretkey']));
+        return [
+            'ready' => $ready,
+            'mode' => 's3',
+            'mode_name' => 'S3/MinIO/OSS',
+            'config' => $config,
+        ];
+    }
+
+    /**
+     * @param string $backupName 形如 20260714-102600（不含卷号与扩展名）
+     * @return array
+     */
+    private function uploadBackupByName($backupName)
+    {
+        if (!is_string($backupName) || !preg_match('/^\d{8}-\d{6}$/', $backupName)) {
+            return ['code' => 0, 'msg' => lang('admin/database/select_file')];
+        }
+
+        $storage = $this->getUploadStorageInfo();
+        if (!$storage['ready']) {
+            return ['code' => 0, 'msg' => lang('admin/database/upload_storage_not_ready')];
+        }
+
+        $path = rtrim(str_replace(['/', '\\'], DS, $GLOBALS['config']['db']['backup_path']), DS) . DS;
+        $files = glob($path . $backupName . '-*.sql*');
+        if (empty($files)) {
+            return ['code' => 0, 'msg' => lang('admin/database/select_file')];
+        }
+
+        $uploadConfig = $storage['config'];
+        $uploadConfig['mode'] = 's3';
+        // 本地必须保留；备份不写 public-read ACL
+        $uploadConfig['keep_local'] = 1;
+        $uploadConfig['acl'] = false;
+
+        $cp = 'app\\common\\extend\\upload\\S3';
+        if (!class_exists($cp)) {
+            return ['code' => 0, 'msg' => lang('admin/upload/not_find_extend')];
+        }
+
+        try {
+            $driver = new $cp($uploadConfig);
+            foreach ($files as $absFile) {
+                $base = basename($absFile);
+                if (!preg_match('/^\d{8}-\d{6}-\d+\.sql(?:\.gz)?$/', $base)) {
+                    return ['code' => 0, 'msg' => lang('admin/database/upload_storage_fail')];
+                }
+                $rel = $this->toUploadRelativePath($absFile);
+                if ($rel === '' || strpos($rel, '..') !== false) {
+                    return ['code' => 0, 'msg' => lang('admin/database/upload_storage_fail')];
+                }
+                $url = $driver->submit($rel);
+                if (!$this->isRemoteUploadResult($url, $rel)) {
+                    return ['code' => 0, 'msg' => lang('admin/database/upload_storage_fail')];
+                }
+                // 容灾场景必须保留本地副本
+                if (!is_file($absFile) && !is_file(ROOT_PATH . $rel)) {
+                    return ['code' => 0, 'msg' => lang('admin/database/upload_storage_fail')];
+                }
+            }
+        } catch (\Throwable $e) {
+            // 不把 SDK/路径等细节回传前端
+            return ['code' => 0, 'msg' => lang('admin/database/upload_storage_fail')];
+        }
+
+        return ['code' => 1, 'msg' => 'ok'];
+    }
+
+    /**
+     * 上传驱动成功时应返回 http(s) 远端地址，本地相对路径视为失败
+     */
+    private function isRemoteUploadResult($url, $rel)
+    {
+        if (!is_string($url) || $url === '' || $url === $rel) {
+            return false;
+        }
+        return (strpos($url, 'http://') === 0 || strpos($url, 'https://') === 0);
+    }
+
+    /**
+     * 转为相对 ROOT_PATH 的路径，供上传驱动使用
+     */
+    private function toUploadRelativePath($file)
+    {
+        $file = str_replace('\\', '/', $file);
+        $root = str_replace('\\', '/', rtrim(ROOT_PATH, '/\\'));
+        if (strpos($file, $root . '/') === 0) {
+            return ltrim(substr($file, strlen($root)), '/');
+        }
+        $real = realpath($file);
+        $rootReal = realpath(ROOT_PATH);
+        if ($real && $rootReal) {
+            $real = str_replace('\\', '/', $real);
+            $rootReal = str_replace('\\', '/', $rootReal);
+            if (strpos($real, $rootReal . '/') === 0) {
+                return ltrim(substr($real, strlen($rootReal)), '/');
+            }
+        }
+        return '';
     }
 
     /**

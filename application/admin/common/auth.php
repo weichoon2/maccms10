@@ -1980,6 +1980,13 @@ return array (
         'controller' => 'database',
         'action' => 'columns',
       ),
+      10007 => 
+      array (
+        'show' => 0,
+        'name' => '--数据库备份上传对象存储',
+        'controller' => 'database',
+        'action' => 'uploadstorage',
+      ),
       102 => 
       array (
         'show' => 1,

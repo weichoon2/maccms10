@@ -79,6 +79,16 @@ class Base extends All
             }
         }
 
+        // 备份上传对象存储：已授权 database/export 的子管理员可执行
+        if ($c === 'database' && $a === 'uploadstorage') {
+            $authStr = ',' . strtolower((string)$this->_admin['admin_auth']) . ',';
+            if (strpos($authStr, ',database/uploadstorage,') !== false
+                || strpos($authStr, ',database/export,') !== false
+                || strpos($authStr, ',database/index,') !== false) {
+                return true;
+            }
+        }
+
         $auths = $this->_admin['admin_auth'] . ',index/index,index/welcome,index/logout,';
         $cur = ','.$c.'/'.$a.',';
         if($this->_admin['admin_id'] =='1'){

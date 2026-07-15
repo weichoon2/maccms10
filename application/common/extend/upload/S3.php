@@ -38,23 +38,34 @@ class S3
             $options['use_path_style_endpoint'] = true;
         }
         $s3 = new S3Client($options);
+        $filePath = ROOT_PATH . $file_path;
+        if (!is_file($filePath)) {
+            return $file_path;
+        }
         try {
-            $filePath = ROOT_PATH . $file_path;
             $key = !empty($basepath) ? rtrim($basepath, '/') . '/' . ltrim($file_path, '/') : $file_path;
-            $result = $s3->putObject([
+            $put = [
                 'Bucket' => $bucket,
                 'Key'    => $key,
                 'Body'   => fopen($filePath, 'r'),
-                'ACL'    => 'public-read'
-            ]);
+            ];
+            // acl=false/'' 时不写 ACL（适合备份私有桶 / MinIO）；未传时保持图片场景 public-read
+            if (array_key_exists('acl', $this->config)) {
+                if ($this->config['acl'] !== false && $this->config['acl'] !== null && $this->config['acl'] !== '') {
+                    $put['ACL'] = $this->config['acl'];
+                }
+            } else {
+                $put['ACL'] = 'public-read';
+            }
+            $result = $s3->putObject($put);
         } catch (AwsException $e) {
-            echo $e->getMessage() . "\n";
+            return $file_path;
         }
 
         empty($this->config['keep_local']) && @unlink($filePath);
         if (!empty($domain)) {
             return rtrim($domain, '/') . '/' . $bucket . '/' . $key;
         }
-        return $result['ObjectURL'];
+        return isset($result['ObjectURL']) ? $result['ObjectURL'] : $file_path;
     }
 }

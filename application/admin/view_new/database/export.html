@@ -15,6 +15,14 @@
     </div>
 
     <form id="pageListForm" class="layui-form">
+        <div class="mb10">
+            {if condition="$upload_storage_ready"}
+            <input type="checkbox" name="upload_storage" value="1" title="{:lang('admin/database/upload_storage')}" lay-skin="primary">
+            <div class="layui-form-mid layui-word-aux" style="float:none;display:inline-block;">{$upload_storage_mode} · {:lang('admin/database/upload_storage_tip')}</div>
+            {else/}
+            <div class="layui-word-aux">{:lang('admin/database/upload_storage_not_ready')}</div>
+            {/if}
+        </div>
         <table class="layui-table mt10" lay-even="">
             <colgroup>
                 <col width="50">

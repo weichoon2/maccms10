@@ -17,7 +17,7 @@
                 <th>{:lang('admin/database/backup_zip')}</th>
                 <th>{:lang('admin/database/backup_size')}</th>
                 <th>{:lang('admin/database/backup_time')}</th>
-                <th width="180">{:lang('opt')}</th>
+                <th width="220">{:lang('opt')}</th>
             </tr>
             </thead>
             <tbody>
@@ -31,6 +31,9 @@
                 <td>
                     <div class="layui-btn-group">
                         <a data-href="{:url('import?id='.strtotime($key))}" class="layui-badge-rim layui-btn-small j-ajax" confirm="{:lang('admin/database/import_confirm')}">{:lang('admin/database/import')}</a>
+                        {if condition="$upload_storage_ready"}
+                        <a data-href="{:url('uploadStorage?id='.strtotime($key))}" class="layui-badge-rim layui-btn-small j-ajax" confirm="{:lang('admin/database/upload_storage_confirm')}">{:lang('admin/database/upload_storage_btn')}</a>
+                        {/if}
                         <a data-href="{:url('del?id='.strtotime($key))}" class="layui-badge-rim layui-btn-small j-tr-del">{:lang('del')}</a>
                     </div>
                 </td>
