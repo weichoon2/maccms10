@@ -150,4 +150,15 @@ class Timming extends Base
             mac_echo('[notify] vip expiration reminders sent: ' . intval($res['info']['sent']));
         }
     }
+
+    protected function vodpublish($param)
+    {
+        @parse_str($param, $output);
+        $limit = isset($output['limit']) ? intval($output['limit']) : 200;
+        $res = \app\common\util\VodPublishService::publishDue($limit);
+        mac_echo('[vodpublish] ' . $res['msg']);
+        if (!empty($res['ids'])) {
+            mac_echo('[vodpublish] ids: ' . implode(',', $res['ids']));
+        }
+    }
 }

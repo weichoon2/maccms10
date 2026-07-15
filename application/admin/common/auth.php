@@ -971,6 +971,22 @@ return array (
         'action' => 'data',
         'param' => 'status=2',
       ),
+      485 => 
+      array (
+        'show' => 1,
+        'name' => lang('menu/vod_data_draft'),
+        'controller' => 'vod',
+        'action' => 'data',
+        'param' => 'status=3',
+      ),
+      486 => 
+      array (
+        'show' => 1,
+        'name' => lang('menu/vod_data_scheduled'),
+        'controller' => 'vod',
+        'action' => 'data',
+        'param' => 'status=4',
+      ),
       484 => 
       array (
         'show' => 1,

@@ -7,6 +7,7 @@ use app\common\util\MeilisearchService;
 use app\common\util\MeilisearchListBridge;
 use app\common\util\MeilisearchSync;
 use app\common\util\VodAuditService;
+use app\common\util\VodPublishService;
 use app\common\validate\Vod as VodValidate;
 
 class Vod extends Base {
@@ -790,6 +791,7 @@ class Vod extends Base {
         $data = VodValidate::formatDataBeforeDb($data);
         $seoObjId = 0;
         $isNew = empty($data['vod_id']);
+        VodPublishService::normalizeOnSave($data);
         VodAuditService::applyOnSave($data, $isNew);
         if(!empty($data['vod_id'])){
 

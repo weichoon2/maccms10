@@ -303,6 +303,19 @@ class Index extends Controller
 			'runtime' => 0,
 		]);
 
+		// 视频定时上架任务（幂等，仅缺失时注入，不覆盖用户调整）
+		mac_inject_timming_task('vod_publish', [
+			'id'      => 'vod_publish',
+			'status'  => '1',
+			'name'    => 'vod_publish',
+			'des'     => '视频定时上架',
+			'file'    => 'vodpublish',
+			'param'   => 'limit=200',
+			'weeks'   => '1,2,3,4,5,6,0',
+			'hours'   => '00,01,02,03,04,05,06,07,08,09,10,11,12,13,14,15,16,17,18,19,20,21,22,23',
+			'runtime' => 0,
+		]);
+
         // 导入系统初始数据库结构
         // 导入SQL
         $sql_file = APP_PATH.'install/sql/install.sql';

@@ -120,6 +120,18 @@ mac_inject_timming_task('notify_vip_expire', [
     'hours'   => '00,06,12,18',
     'runtime' => 0,
 ]);
+// 视频定时上架任务（幂等，仅缺失时注入，不覆盖用户调整）
+mac_inject_timming_task('vod_publish', [
+    'id'      => 'vod_publish',
+    'status'  => '1',
+    'name'    => 'vod_publish',
+    'des'     => '视频定时上架',
+    'file'    => 'vodpublish',
+    'param'   => 'limit=200',
+    'weeks'   => '1,2,3,4,5,6,0',
+    'hours'   => '00,01,02,03,04,05,06,07,08,09,10,11,12,13,14,15,16,17,18,19,20,21,22,23',
+    'runtime' => 0,
+]);
 if(!empty($col_list[$pre.'user']) && empty($col_list[$pre.'user']['user_down_quota'])){
     $sql .= "ALTER TABLE `{$pre}user` ADD `user_down_quota` int(10) unsigned NOT NULL DEFAULT '0' COMMENT '下载额度' AFTER `user_points_froze`;";
     $sql .="\r";
@@ -918,6 +930,19 @@ if (empty($col_list[$pre . 'monitor_abnormal_access'])) {
     $sql .= "('UV 异常暴跌',0,'analytics','analytics.uv','last',60,'lt',0.0000,0,2,120,60,'notify','zscore','{\"k\":3,\"baseline_days\":14,\"min_sample\":7,\"min_abs\":30}'),";
     $sql .= "('跳出率飙升',0,'analytics','analytics.bounce_rate','last',1440,'gt',0.0000,0,2,720,720,'notify','zscore','{\"k\":3,\"baseline_days\":14,\"min_sample\":7,\"min_abs\":10}');";
     $sql .= "\r";
+}
+// 视频定时上架时间（Unix 时间戳；vod_pubdate 仍为上映日期元数据）
+if (!empty($col_list[$pre . 'vod']) && empty($col_list[$pre . 'vod']['vod_publish_time'])) {
+    $sql .= "ALTER TABLE `{$pre}vod` ADD `vod_publish_time` int(10) unsigned NOT NULL DEFAULT '0' COMMENT '定时上架时间戳' AFTER `vod_pubdate`;";
+    $sql .= "\r";
+}
+// publishDue 定时任务：vod_publish_time>0 高选择性命中，避免大表全扫
+if (!empty($col_list[$pre . 'vod'])) {
+    $index_exists = \think\Db::query("SHOW INDEX FROM `{$pre}vod` WHERE Key_name = 'vod_publish_time'");
+    if (empty($index_exists)) {
+        $sql .= "ALTER TABLE `{$pre}vod` ADD INDEX `vod_publish_time` (`vod_publish_time`);";
+        $sql .= "\r";
+    }
 }
 
 // AI 搜索反滥用配置注入（漏洞 12）：require_login / anon_captcha_after /

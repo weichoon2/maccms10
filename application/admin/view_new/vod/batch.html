@@ -26,6 +26,8 @@
                         <option value="0" {if condition="$param['status'] eq '0'"}selected {/if}>{:lang('reviewed_not')}</option>
                         <option value="1" {if condition="$param['status'] eq '1'"}selected {/if}>{:lang('reviewed')}</option>
                         <option value="2" {if condition="$param['status'] eq '2'"}selected {/if}>{:lang('reviewed_reject')}</option>
+                        <option value="3" {if condition="$param['status'] eq '3'"}selected {/if}>{:lang('reviewed_draft')}</option>
+                        <option value="4" {if condition="$param['status'] eq '4'"}selected {/if}>{:lang('reviewed_scheduled')}</option>
                     </select>
                 </div>
                 <div class="layui-input-inline w150">
@@ -194,13 +196,16 @@
                 <div class="layui-inline">
                     <label class="layui-form-label"><input type="checkbox" lay-ignore value="1" name="ck_status">{:lang('status')}</label>
                     <div class="layui-input-inline" style="width: 100px;">
-                        <select name="val_status">
+                        <select name="val_status" id="batch_val_status" lay-filter="batch_val_status">
                             <option value="">{:lang('select_status')}</option>
                             <option value="0" >{:lang('reviewed_not')}</option>
                             <option value="1" >{:lang('reviewed')}</option>
                             <option value="2" >{:lang('reviewed_reject')}</option>
+                            <option value="3" >{:lang('reviewed_draft')}</option>
+                            <option value="4" >{:lang('reviewed_scheduled')}</option>
                         </select>
                         <input type="text" name="val_audit_remark" class="layui-input mgt10" placeholder="{:lang('admin/vod_audit/remark_placeholder')}">
+                        <input type="text" name="val_publish_time" id="batch_val_publish_time" class="layui-input mgt10" style="display:none;" placeholder="{:lang('admin/vod_publish/time_placeholder')}">
                     </div>
                 </div>
             </div>
@@ -358,8 +363,21 @@
 </div>
 
 <script type="text/javascript">
-    layui.use(['form'], function () {
-
+    layui.use(['form', 'laydate'], function () {
+        var form = layui.form;
+        var laydate = layui.laydate;
+        laydate.render({
+            elem: '#batch_val_publish_time',
+            type: 'datetime',
+            trigger: 'click'
+        });
+        function toggleBatchStatusFields(status) {
+            document.getElementById('batch_val_publish_time').style.display = (status === '4') ? '' : 'none';
+        }
+        toggleBatchStatusFields(document.getElementById('batch_val_status').value);
+        form.on('select(batch_val_status)', function (data) {
+            toggleBatchStatusFields(data.value);
+        });
     });
 
     $('.btn_submit, .btn_del_multi').click(function(){

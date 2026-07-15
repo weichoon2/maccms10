@@ -74,6 +74,9 @@ class VodAuditService
         if (intval($data['vod_status'] ?? 0) === self::STATUS_APPROVED) {
             return;
         }
+        if (in_array(intval($data['vod_status'] ?? 0), [VodPublishService::STATUS_DRAFT, VodPublishService::STATUS_SCHEDULED], true)) {
+            return;
+        }
         // 已驳回且未改回待审：保留人工/历史审核结论，避免编辑时再次被规则覆盖
         if (!$isNew && intval($data['vod_status'] ?? 0) === self::STATUS_REJECTED) {
             return;
@@ -96,6 +99,7 @@ class VodAuditService
 
         if (intval($data['vod_status'] ?? 0) === self::STATUS_APPROVED) {
             $data['vod_audit_remark'] = '';
+            $data['vod_publish_time'] = 0;
         }
     }
 
@@ -164,13 +168,7 @@ class VodAuditService
 
     public static function statusText($status)
     {
-        $status = intval($status);
-        $map = [
-            self::STATUS_PENDING => lang('reviewed_not'),
-            self::STATUS_APPROVED => lang('reviewed'),
-            self::STATUS_REJECTED => lang('reviewed_reject'),
-        ];
-        return $map[$status] ?? lang('unknown');
+        return VodPublishService::statusText($status);
     }
 
     public static function ruleTypeText($type)

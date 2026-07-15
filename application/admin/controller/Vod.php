@@ -1,6 +1,7 @@
 <?php
 namespace app\admin\controller;
 use app\common\util\VodAuditService;
+use app\common\util\VodPublishService;
 use think\Cache;
 use think\Db;
 
@@ -9,6 +10,7 @@ class Vod extends Base
     public function __construct()
     {
         parent::__construct();
+        $this->view->config('view_path', APP_PATH . 'admin/view_new/');
     }
 
     public function data()
@@ -24,7 +26,7 @@ class Vod extends Base
         if(!empty($param['level'])){
             $where['vod_level'] = ['eq',$param['level']];
         }
-        if(in_array($param['status'],['0','1','2'],true)){
+        if(in_array($param['status'],['0','1','2','3','4'],true)){
             $where['vod_status'] = ['eq',$param['status']];
         }
         if(in_array($param['copyright'],['0','1'])){
@@ -228,6 +230,13 @@ class Vod extends Base
                     return $this->error($remarkErr);
                 }
             }
+            if (!empty($param['ck_status']) && intval($param['val_status'] ?? -1) === VodPublishService::STATUS_SCHEDULED) {
+                $publishTime = VodPublishService::parsePublishTime($param['val_publish_time'] ?? 0);
+                $scheduleErr = VodPublishService::scheduleTimeError(VodPublishService::STATUS_SCHEDULED, $publishTime);
+                if ($scheduleErr !== '') {
+                    return $this->error($scheduleErr);
+                }
+            }
             $where = $this->vodBatchFilterWhere($param);
             if($param['ck_del'] == 1){
                 $res = model('Vod')->recycleData($where);
@@ -277,10 +286,20 @@ class Vod extends Base
                     $des .= '&nbsp;'.lang('level').'：'.$param['val_level'].'；';
                 }
                 if(!empty($param['ck_status']) && isset($param['val_status'])){
-                    $update['vod_status'] = $param['val_status'];
+                    $valStatus = intval($param['val_status']);
+                    $update['vod_status'] = $valStatus;
                     $update['vod_audit_remark'] = '';
-                    if (intval($param['val_status']) === VodAuditService::STATUS_REJECTED) {
+                    if ($valStatus === VodAuditService::STATUS_REJECTED) {
                         $update['vod_audit_remark'] = mb_substr(trim((string)$param['val_audit_remark']), 0, 255);
+                        $update['vod_publish_time'] = 0;
+                    } elseif ($valStatus === VodAuditService::STATUS_APPROVED) {
+                        $update['vod_publish_time'] = 0;
+                    } elseif ($valStatus === VodPublishService::STATUS_DRAFT) {
+                        $update['vod_publish_time'] = 0;
+                    } elseif ($valStatus === VodPublishService::STATUS_SCHEDULED) {
+                        $update['vod_publish_time'] = VodPublishService::parsePublishTime($param['val_publish_time'] ?? 0);
+                    } else {
+                        $update['vod_publish_time'] = 0;
                     }
                     $des .= '&nbsp;'.lang('status').'：['.VodAuditService::statusText($param['val_status']).']；';
                 }
@@ -417,7 +436,7 @@ class Vod extends Base
         if (!empty($param['level'])) {
             $where['vod_level'] = ['eq', $param['level']];
         }
-        if (in_array($param['status'] ?? '', ['0', '1', '2'])) {
+        if (in_array($param['status'] ?? '', ['0', '1', '2', '3', '4'])) {
             $where['vod_status'] = ['eq', $param['status']];
         }
         if (in_array($param['copyright'] ?? '', ['0', '1'])) {
@@ -526,6 +545,11 @@ class Vod extends Base
                 if ($remarkErr !== '') {
                     return $this->error($remarkErr);
                 }
+            }
+            $publishTime = VodPublishService::parsePublishTime($param['vod_publish_time'] ?? 0);
+            $scheduleErr = VodPublishService::scheduleTimeError($param['vod_status'] ?? 0, $publishTime);
+            if ($scheduleErr !== '') {
+                return $this->error($scheduleErr);
             }
             $res = model('Vod')->saveData($param);
             if($res['code']>1){
@@ -769,14 +793,28 @@ class Vod extends Base
                 if ($col === 'vod_status') {
                     $update[$col] = $val;
                     $remark = trim((string)input('post.remark', input('get.remark', '')));
-                    if (intval($val) === VodAuditService::STATUS_REJECTED) {
+                    $valStatus = intval($val);
+                    if ($valStatus === VodAuditService::STATUS_REJECTED) {
                         $remarkErr = VodAuditService::rejectRemarkError($remark);
                         if ($remarkErr !== '') {
                             return $this->error($remarkErr);
                         }
                         $update['vod_audit_remark'] = mb_substr($remark, 0, 255);
-                    } elseif (intval($val) === VodAuditService::STATUS_APPROVED) {
+                        $update['vod_publish_time'] = 0;
+                    } elseif ($valStatus === VodAuditService::STATUS_APPROVED) {
                         $update['vod_audit_remark'] = '';
+                        $update['vod_publish_time'] = 0;
+                    } elseif ($valStatus === VodPublishService::STATUS_DRAFT) {
+                        $update['vod_publish_time'] = 0;
+                    } elseif ($valStatus === VodPublishService::STATUS_SCHEDULED) {
+                        $publishTime = VodPublishService::parsePublishTime(input('post.publish_time', input('get.publish_time', 0)));
+                        $scheduleErr = VodPublishService::scheduleTimeError(VodPublishService::STATUS_SCHEDULED, $publishTime);
+                        if ($scheduleErr !== '') {
+                            return $this->error($scheduleErr);
+                        }
+                        $update['vod_publish_time'] = $publishTime;
+                    } else {
+                        $update['vod_publish_time'] = 0;
                     }
                 } else {
                     $update[$col] = $val;
@@ -819,7 +857,6 @@ class Vod extends Base
         if (is_array($ids)) {
             $ids = join(',', $ids);
         }
-        $this->view->config('view_path', APP_PATH . 'admin/view_new/');
         $this->assign('url', url('field'));
         $this->assign('col', 'vod_status');
         $this->assign('ids', $ids);
@@ -849,6 +886,9 @@ class Vod extends Base
         $where = ['vod_id' => ['in', $ids]];
         $update = ['vod_status' => $status];
         $update['vod_audit_remark'] = $status === 2 ? $remark : '';
+        if ($status === VodAuditService::STATUS_APPROVED || $status === VodAuditService::STATUS_REJECTED) {
+            $update['vod_publish_time'] = 0;
+        }
 
         $res = model('Vod')->fieldData($where, $update);
         if ($res['code'] > 1) {
