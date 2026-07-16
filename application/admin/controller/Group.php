@@ -7,6 +7,7 @@ class Group extends Base
     public function __construct()
     {
         parent::__construct();
+        $this->view->config('view_path', APP_PATH . 'admin/view_new/');
     }
 
     public function index()
@@ -30,13 +31,24 @@ class Group extends Base
 
         $this->assign('param',$param);
         $this->assign('title',lang('admin/group/title'));
-        return $this->fetch('admin@group/index');
+        return $this->fetch('group/index');
     }
 
     public function info()
     {
         if (Request()->isPost()) {
             $param = input('post.');
+
+            // VIP 活动价时段：datetime-local 输入(_input) 转 unix 时间戳存库
+            foreach (['day', 'week', 'month', 'year'] as $pl) {
+                foreach (['start', 'end'] as $se) {
+                    $col = 'group_activity_' . $se . '_time_' . $pl;
+                    if (isset($param[$col . '_input'])) {
+                        $param[$col] = !empty($param[$col . '_input']) ? strtotime($param[$col . '_input']) : 0;
+                        unset($param[$col . '_input']);
+                    }
+                }
+            }
 
             if($GLOBALS['config']['user']['reg_group'] == $param['group_id']){
                 $param['group_status'] = 1;
@@ -53,14 +65,24 @@ class Group extends Base
         $where['group_id'] = ['eq',$id];
         $res = model('Group')->infoData($where);
 
-        $this->assign('info',$res['info']);
+        $info = $res['info'];
+        // VIP 活动价时段：unix 时间戳转 datetime-local 输入串(_input) 供表单回显
+        if (is_array($info)) {
+            foreach (['day', 'week', 'month', 'year'] as $pl) {
+                foreach (['start', 'end'] as $se) {
+                    $col = 'group_activity_' . $se . '_time_' . $pl;
+                    $info[$col . '_input'] = !empty($info[$col]) ? date('Y-m-d\TH:i:s', intval($info[$col])) : '';
+                }
+            }
+        }
+        $this->assign('info',$info);
 
 
         $type_tree = model('Type')->getCache('type_tree');
         $this->assign('type_tree',$type_tree);
 
         $this->assign('title',lang('admin/group/title'));
-        return $this->fetch('admin@group/info');
+        return $this->fetch('group/info');
     }
 
     public function del()

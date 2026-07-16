@@ -666,11 +666,37 @@ class User extends Base
     public function ajax_upgrade()
     {
         $group_list = model('Group')->getCache();
+        $group_list = $this->buildVipActivityGroupList($group_list);
         $this->assign('group_list', $group_list);
         $this->assign('pay_config', $GLOBALS['config']['pay']);
         $this->assign('param', input());
         $html = $this->fetch('user/ajax_upgrade');
         return json($html);
+    }
+
+    /**
+     * 归一化 VIP 套餐活动价：活动有效时用 group_activity_points_* 覆盖 group_points_*，
+     * 使模板渲染时 data-points 直接反映生效积分（活动价或正常价）。
+     */
+    private function buildVipActivityGroupList($group_list)
+    {
+        if (!is_array($group_list)) {
+            return $group_list;
+        }
+        foreach ($group_list as $gid => &$vo) {
+            if (!is_array($vo) || intval($vo['group_id']) <= 2) {
+                continue;
+            }
+            foreach (['day', 'week', 'month', 'year'] as $pl) {
+                $plan = model('Group')->vipPlanPrice($vo, $pl);
+                $vo['group_points_' . $pl] = intval($plan['effective_points']);
+                $vo['is_activity_' . $pl] = intval($plan['is_activity']);
+                $endKey = 'group_activity_end_time_' . $pl;
+                $now = time();
+                $vo['activity_countdown_' . $pl] = (intval($plan['is_activity']) === 1 && intval($vo[$endKey] ?? 0) > $now) ? (intval($vo[$endKey]) - $now) : 0;
+            }
+        }
+        return $group_list;
     }
 
     public function popedom()

@@ -2,6 +2,7 @@
 
 namespace app\api\controller;
 
+use app\common\util\CsrfGuard;
 use think\Db;
 use think\Request;
 
@@ -14,6 +15,7 @@ use think\Request;
 class Order extends Base
 {
     use PublicApi;
+    use CsrfGuard;
 
     public function __construct()
     {
@@ -52,6 +54,18 @@ class Order extends Base
         $auth = $this->_checkLogin();
         if (!$auth['ok']) return $auth['response'];
 
+        if (!$request->isPost()) {
+            return json(['code' => 1001, 'msg' => lang('param_err')]);
+        }
+
+        $csrfErr = $this->checkCsrf();
+        if ($csrfErr !== null) return json($csrfErr);
+
+        $limited = $this->apiRateLimit('order_create', $auth['user_id'], 20, 60);
+        if ($limited !== true) {
+            return $limited;
+        }
+
         $param = $request->param();
 
         $validate = validate($request->controller());
@@ -66,16 +80,45 @@ class Order extends Base
             return json(['code' => 1002, 'msg' => '最小充值金额不能低于' . $pay_config['min'] . '元']);
         }
 
+        // 服务端定价：可选优惠券抵扣。券只减现金，不减积分：
+        // order_points 按用户选择的充值金额（原价）×scale 计，order_price 记折扣后实付金额。
+        $couponUserId = intval($param['coupon_user_id'] ?? 0);
+        $priced = model('Coupon')->calculateOrderPrice('recharge', $price, [
+            'user_id'        => $auth['user_id'],
+            'coupon_user_id' => $couponUserId,
+        ]);
+        if ($priced['code'] > 1) {
+            return json($priced);
+        }
+        $payPrice = floatval($priced['info']['pay_price']);
+        $originalPrice = floatval($priced['info']['original_price']);
+        $scale = intval($pay_config['scale'] ?? 1);
+        $orderPoints = intval($scale * $originalPrice);
+
         $data = [];
         $data['user_id']      = $auth['user_id'];
         $data['order_code']   = 'PAY' . mac_get_uniqid_code();
-        $data['order_price']  = $price;
+        $data['order_price']  = $payPrice;
         $data['order_time']   = time();
-        $data['order_points'] = intval(($pay_config['scale'] ?? 1) * $price);
+        $data['order_points'] = $orderPoints;
+        if (!empty($priced['info']['snapshot'])) {
+            $data['order_remarks'] = json_encode($priced['info']['snapshot'], JSON_UNESCAPED_UNICODE);
+        }
 
         $res = model('Order')->saveData($data);
         if ($res['code'] > 1) {
             return json($res);
+        }
+
+        // 预占券到本订单（无券订单跳过）
+        if ($couponUserId > 0) {
+            $orderId = intval(\think\Db::name('Order')->where('order_code', $data['order_code'])->value('order_id'));
+            $resv = model('CouponUser')->reserveForOrder($couponUserId, $auth['user_id'], $orderId, $data['order_code']);
+            if ($resv['code'] > 1) {
+                // 预占失败：清理刚创建的废弃订单，避免污染用户订单列表
+                \think\Db::name('Order')->where('order_code', $data['order_code'])->delete();
+                return json($resv);
+            }
         }
 
         return json([

@@ -32,6 +32,59 @@
         </div>
 
         <div class="layui-form-item">
+            <label class="layui-form-label">{:lang('admin/group/activity_points')}：</label>
+            <div class="layui-input-inline">
+                <input type="text" class="layui-input" value="{$info.group_activity_points_day|default=0}" placeholder="{:lang('admin/group/pack_day')}" name="group_activity_points_day">
+            </div>
+            <div class="layui-input-inline">
+                <input type="text" class="layui-input" value="{$info.group_activity_points_week|default=0}" placeholder="{:lang('admin/group/pack_week')}" name="group_activity_points_week">
+            </div>
+            <div class="layui-input-inline">
+                <input type="text" class="layui-input" value="{$info.group_activity_points_month|default=0}" placeholder="{:lang('admin/group/pack_month')}" name="group_activity_points_month">
+            </div>
+            <div class="layui-input-inline">
+                <input type="text" class="layui-input" value="{$info.group_activity_points_year|default=0}" placeholder="{:lang('admin/group/pack_year')}" name="group_activity_points_year">
+            </div>
+            <div class="layui-form-mid layui-word-aux">{:lang('admin/group/activity_tip')}</div>
+        </div>
+        <div class="layui-form-item">
+            <label class="layui-form-label">{:lang('admin/group/pack_day')}{:lang('admin/group/activity_time')}：</label>
+            <div class="layui-input-inline">
+                <input type="datetime-local" class="layui-input" value="{$info.group_activity_start_time_day_input|default=''}" name="group_activity_start_time_day_input">
+            </div>
+            <div class="layui-input-inline">
+                <input type="datetime-local" class="layui-input" value="{$info.group_activity_end_time_day_input|default=''}" name="group_activity_end_time_day_input">
+            </div>
+        </div>
+        <div class="layui-form-item">
+            <label class="layui-form-label">{:lang('admin/group/pack_week')}{:lang('admin/group/activity_time')}：</label>
+            <div class="layui-input-inline">
+                <input type="datetime-local" class="layui-input" value="{$info.group_activity_start_time_week_input|default=''}" name="group_activity_start_time_week_input">
+            </div>
+            <div class="layui-input-inline">
+                <input type="datetime-local" class="layui-input" value="{$info.group_activity_end_time_week_input|default=''}" name="group_activity_end_time_week_input">
+            </div>
+        </div>
+        <div class="layui-form-item">
+            <label class="layui-form-label">{:lang('admin/group/pack_month')}{:lang('admin/group/activity_time')}：</label>
+            <div class="layui-input-inline">
+                <input type="datetime-local" class="layui-input" value="{$info.group_activity_start_time_month_input|default=''}" name="group_activity_start_time_month_input">
+            </div>
+            <div class="layui-input-inline">
+                <input type="datetime-local" class="layui-input" value="{$info.group_activity_end_time_month_input|default=''}" name="group_activity_end_time_month_input">
+            </div>
+        </div>
+        <div class="layui-form-item">
+            <label class="layui-form-label">{:lang('admin/group/pack_year')}{:lang('admin/group/activity_time')}：</label>
+            <div class="layui-input-inline">
+                <input type="datetime-local" class="layui-input" value="{$info.group_activity_start_time_year_input|default=''}" name="group_activity_start_time_year_input">
+            </div>
+            <div class="layui-input-inline">
+                <input type="datetime-local" class="layui-input" value="{$info.group_activity_end_time_year_input|default=''}" name="group_activity_end_time_year_input">
+            </div>
+        </div>
+
+        <div class="layui-form-item">
             <label class="layui-form-label">{:lang('status')}：</label>
             <div class="layui-input-block">
                     <input name="group_status" type="radio" value="0" title="{:lang('disable')}" {if condition="$info['group_status'] neq 1"}checked {/if}>

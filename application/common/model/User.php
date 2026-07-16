@@ -1025,7 +1025,9 @@ class User extends Base
             return ['code'=>1004,'msg'=>lang('model/user/group_is_close')];
         }
 
-        $point = $group_info['group_points_'.$long];
+        // 活动价优先：活动有效时用 group_activity_points_*，否则回退正常价
+        $plan = model('Group')->vipPlanPrice($group_info, $long);
+        $point = intval($plan['effective_points']);
         if($GLOBALS['user']['user_points'] < $point){
             return ['code'=>1005,'msg'=>lang('model/user/potins_not_enough')];
         }
@@ -1073,7 +1075,8 @@ class User extends Base
 
         $group_id = intval($remarks['group_id'] ?? 0);
         $long = trim($remarks['long'] ?? '');
-        $point = intval($remarks['upgrade_points'] ?? 0);
+        // 优先使用活动价快照的 effective_points，回退到 upgrade_points
+        $point = intval($remarks['upgrade_effective_points'] ?? $remarks['upgrade_points'] ?? 0);
         $points_long = ['day' => 86400, 'week' => 86400 * 7, 'month' => 86400 * 30, 'year' => 86400 * 365];
         if ($group_id < 3 || !isset($points_long[$long]) || $point < 1) {
             return ['code' => 1002, 'msg' => lang('model/user/upgrade_param_invalid')];

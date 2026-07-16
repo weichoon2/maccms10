@@ -108,6 +108,100 @@ if(empty($col_list[$pre.'notify_read'])){
     $sql .= "ALTER TABLE `{$pre}notify_read` ENGINE=InnoDB;";
     $sql .="\r";
 }
+// 优惠券 + 限时折扣（Issue 3）：mac_coupon / mac_coupon_user / mac_group 活动字段 / mac_order.order_remarks 扩容
+if(empty($col_list[$pre.'coupon'])){
+    $sql .= "CREATE TABLE `{$pre}coupon` ( `coupon_id` int(10) unsigned NOT NULL AUTO_INCREMENT, `coupon_name` varchar(100) NOT NULL DEFAULT '', `coupon_type` varchar(20) NOT NULL DEFAULT 'amount', `coupon_value` decimal(10,2) unsigned NOT NULL DEFAULT '0.00', `coupon_min_price` decimal(10,2) unsigned NOT NULL DEFAULT '0.00', `coupon_scene` varchar(20) NOT NULL DEFAULT 'all', `coupon_target` text NOT NULL, `coupon_total` int(10) unsigned NOT NULL DEFAULT '0', `coupon_received` int(10) unsigned NOT NULL DEFAULT '0', `coupon_used` int(10) unsigned NOT NULL DEFAULT '0', `coupon_per_user` int(10) unsigned NOT NULL DEFAULT '1', `coupon_start_time` int(10) unsigned NOT NULL DEFAULT '0', `coupon_end_time` int(10) unsigned NOT NULL DEFAULT '0', `coupon_status` tinyint(1) unsigned NOT NULL DEFAULT '1', `coupon_time` int(10) unsigned NOT NULL DEFAULT '0', PRIMARY KEY (`coupon_id`), KEY `coupon_time` (`coupon_time`) ) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8;";
+    $sql .="\r";
+} else {
+}
+if(empty($col_list[$pre.'coupon_user'])){
+    $sql .= "CREATE TABLE `{$pre}coupon_user` ( `coupon_user_id` int(10) unsigned NOT NULL AUTO_INCREMENT, `coupon_id` int(10) unsigned NOT NULL DEFAULT '0', `user_id` int(10) unsigned NOT NULL DEFAULT '0', `coupon_user_status` tinyint(1) unsigned NOT NULL DEFAULT '0', `coupon_user_time` int(10) unsigned NOT NULL DEFAULT '0', `coupon_user_use_time` int(10) unsigned NOT NULL DEFAULT '0', `order_id` int(10) unsigned NOT NULL DEFAULT '0', `order_code` varchar(30) NOT NULL DEFAULT '', PRIMARY KEY (`coupon_user_id`), UNIQUE KEY `uk_coupon_user` (`coupon_id`,`user_id`), KEY `order_code` (`order_code`) ) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8;";
+    $sql .="\r";
+} else {
+    $uk = \think\Db::query("SHOW INDEX FROM `{$pre}coupon_user` WHERE Key_name = 'uk_coupon_user'");
+    if (empty($uk)) {
+        $sql .= "ALTER TABLE `{$pre}coupon_user` ADD UNIQUE KEY `uk_coupon_user` (`coupon_id`,`user_id`);";
+        $sql .="\r";
+    }
+}
+// mac_group VIP 活动价 + 时段字段（day/week/month/year），幂等
+// 字段清单：group_activity_points_day/week/month/year, group_activity_start_time_day/week/month/year, group_activity_end_time_day/week/month/year
+$coupon_group_adds = [
+    'group_activity_points_day'        => "int(10) unsigned NOT NULL DEFAULT '0'",
+    'group_activity_points_week'       => "int(10) unsigned NOT NULL DEFAULT '0'",
+    'group_activity_points_month'      => "int(10) unsigned NOT NULL DEFAULT '0'",
+    'group_activity_points_year'       => "int(10) unsigned NOT NULL DEFAULT '0'",
+    'group_activity_start_time_day'    => "int(10) unsigned NOT NULL DEFAULT '0'",
+    'group_activity_start_time_week'   => "int(10) unsigned NOT NULL DEFAULT '0'",
+    'group_activity_start_time_month'  => "int(10) unsigned NOT NULL DEFAULT '0'",
+    'group_activity_start_time_year'   => "int(10) unsigned NOT NULL DEFAULT '0'",
+    'group_activity_end_time_day'      => "int(10) unsigned NOT NULL DEFAULT '0'",
+    'group_activity_end_time_week'     => "int(10) unsigned NOT NULL DEFAULT '0'",
+    'group_activity_end_time_month'    => "int(10) unsigned NOT NULL DEFAULT '0'",
+    'group_activity_end_time_year'     => "int(10) unsigned NOT NULL DEFAULT '0'",
+];
+foreach ($coupon_group_adds as $col => $def) {
+    if (!empty($col_list[$pre.'group']) && empty($col_list[$pre.'group'][$col])) {
+        $sql .= "ALTER TABLE `{$pre}group` ADD `{$col}` {$def};";
+        $sql .="\r";
+    }
+}
+// mac_order.order_remarks 扩容为 text（VIP 升级/优惠券快照需要更大空间），幂等 ADD/MODIFY
+if (empty($col_list[$pre.'order']['order_remarks'])) {
+    $sql .= "ALTER TABLE `{$pre}order` ADD `order_remarks` text NOT NULL;";
+    $sql .="\r";
+} else {
+    // 仅当当前类型不是 text 时才 MODIFY，避免每次升级都对大表 mac_order 整表重建 + 锁表
+    $remarks_col = \think\Db::query("SHOW COLUMNS FROM `{$pre}order` LIKE 'order_remarks'");
+    if (!empty($remarks_col) && stripos((string)$remarks_col[0]['Type'], 'text') === false) {
+        $sql .= "ALTER TABLE `{$pre}order` MODIFY `order_remarks` text NOT NULL;";
+        $sql .="\r";
+    }
+}
+// 优惠券/秒杀的支付与扣减流程依赖 InnoDB 事务回滚，存量 MyISAM 表迁移到 InnoDB。
+// 必须先探测当前引擎：无条件 ALTER TABLE ... ENGINE=InnoDB 即使表已是 InnoDB 也会整表重建 + 锁表，
+// mac_user / mac_plog 这类百万行大表每次升级都会被锁死几分钟。
+$innodb_tables = [
+    $pre . 'order',
+    $pre . 'user',
+    $pre . 'plog',
+    $pre . 'group',
+    $pre . 'coupon',
+    $pre . 'coupon_user',
+    $pre . 'seckill',
+    $pre . 'seckill_user',
+];
+foreach ($innodb_tables as $innodb_table) {
+    if (empty($col_list[$innodb_table])) {
+        continue;
+    }
+    $table_status = \think\Db::query("SHOW TABLE STATUS LIKE '" . $innodb_table . "'");
+    if (empty($table_status[0]['Engine']) || strtolower($table_status[0]['Engine']) === 'innodb') {
+        continue;
+    }
+    $sql .= "ALTER TABLE `{$innodb_table}` ENGINE=InnoDB;";
+    $sql .="\r";
+}
+// 秒杀模块（Issue 3 追加）：mac_seckill / mac_seckill_user
+if(empty($col_list[$pre.'seckill'])){
+    $sql .= "CREATE TABLE `{$pre}seckill` ( `seckill_id` int(10) unsigned NOT NULL AUTO_INCREMENT, `seckill_name` varchar(100) NOT NULL DEFAULT '', `seckill_target_type` varchar(20) NOT NULL DEFAULT 'vip_group', `seckill_target_id` int(10) unsigned NOT NULL DEFAULT '0', `seckill_target_long` varchar(10) NOT NULL DEFAULT 'month', `seckill_origin_points` int(10) unsigned NOT NULL DEFAULT '0', `seckill_price_points` int(10) unsigned NOT NULL DEFAULT '0', `seckill_total` int(10) unsigned NOT NULL DEFAULT '0', `seckill_sold` int(10) unsigned NOT NULL DEFAULT '0', `seckill_per_user` int(10) unsigned NOT NULL DEFAULT '1', `seckill_start_time` int(10) unsigned NOT NULL DEFAULT '0', `seckill_end_time` int(10) unsigned NOT NULL DEFAULT '0', `seckill_status` tinyint(1) unsigned NOT NULL DEFAULT '1', `seckill_time` int(10) unsigned NOT NULL DEFAULT '0', PRIMARY KEY (`seckill_id`), KEY `seckill_time` (`seckill_time`) ) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8;";
+    $sql .="\r";
+} else {
+    if (!empty($col_list[$pre.'seckill']) && empty($col_list[$pre.'seckill']['seckill_target_long'])) {
+        $sql .= "ALTER TABLE `{$pre}seckill` ADD `seckill_target_long` varchar(10) NOT NULL DEFAULT 'month';";
+        $sql .="\r";
+    }
+}
+if(empty($col_list[$pre.'seckill_user'])){
+    $sql .= "CREATE TABLE `{$pre}seckill_user` ( `seckill_user_id` int(10) unsigned NOT NULL AUTO_INCREMENT, `seckill_id` int(10) unsigned NOT NULL DEFAULT '0', `user_id` int(10) unsigned NOT NULL DEFAULT '0', `order_code` varchar(30) NOT NULL DEFAULT '', `seckill_user_time` int(10) unsigned NOT NULL DEFAULT '0', PRIMARY KEY (`seckill_user_id`), UNIQUE KEY `uk_seckill_user` (`seckill_id`,`user_id`), KEY `order_code` (`order_code`) ) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8;";
+    $sql .="\r";
+} else {
+    $ukSeckill = \think\Db::query("SHOW INDEX FROM `{$pre}seckill_user` WHERE Key_name = 'uk_seckill_user'");
+    if (empty($ukSeckill)) {
+        $sql .= "ALTER TABLE `{$pre}seckill_user` ADD UNIQUE KEY `uk_seckill_user` (`seckill_id`,`user_id`);";
+        $sql .="\r";
+    }
+}
 // 定时任务幂等注入（通知中心 VIP 到期提醒 + 视频定时上架）：仅在缺失时补写，不覆盖用户调整。
 // 升级流程必须自包含：step1 解压覆盖后，本请求已加载的 common.php 可能仍是旧版（磁盘未被
 // 覆盖，或站长设备 opcache 仍缓存旧版），不能依赖 common.php 的 mac_inject_timming_task /

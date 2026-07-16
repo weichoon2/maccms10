@@ -133,10 +133,29 @@ class Order extends Base {
             $update['order_status'] = 1;
             $update['order_pay_time'] = time();
             $update['order_pay_type'] = $pay_type;
-            $res = $this->where($where)->update($update);
+            // 状态翻转即幂等闩：仅当订单仍未支付(0)时翻转，堵住并发重复回调
+            // （异步 notify + 同步 return、网关重试）重复发积分 / 重复升级 VIP
+            $res = $this->where($where)->where('order_status', 0)->update($update);
             if($res===false){
                 Db::rollback();
                 return ['code'=>2002,'msg'=>lang('model/order/update_status_err')];
+            }
+            if(intval($res) < 1){
+                // 已被另一并发回调抢先置为已支付，本次视为已完成，不重复发放
+                Db::rollback();
+                return ['code'=>1,'msg'=>lang('model/order/pay_over')];
+            }
+
+            // 优惠券核销：order_remarks 快照含 coupon.coupon_user_id
+            // 支付回调是「钱已经收到」的终态。券的账目异常（券被删除、并发被其他订单核销等）
+            // 绝不能回滚订单：回滚会让订单停在未支付、积分不发，而网关的钱已经收了，用户白付。
+            // 因此这里一律降级为无券订单继续发放积分，异常只记日志供站长事后对账（最多少收一张券的折扣）。
+            $remarks = json_decode($order['info']['order_remarks'], true);
+            $writeOff = $this->writeOffFromOrder($order['info'], $order_code);
+            if ($writeOff['code'] > 1) {
+                \think\Log::error('COUPON ANOMALY order_code=' . $order_code
+                    . ' coupon_user_id=' . intval($writeOff['info']['coupon_user_id'])
+                    . ' code=' . $writeOff['code'] . ' msg=' . $writeOff['msg']);
             }
 
             $where2 = [];
@@ -152,9 +171,9 @@ class Order extends Base {
             $data['user_id'] = $user['info']['user_id'];
             $data['plog_type'] = 1;
             $data['plog_points'] = $order['info']['order_points'];
+            $data['plog_remarks'] = (string)$order_code;
             model('Plog')->saveData($data);
 
-            $remarks = json_decode($order['info']['order_remarks'], true);
             if(!empty($remarks) && is_array($remarks) && ($remarks['biz'] ?? '') === 'member_upgrade'){
                 $user_latest = model('User')->infoData(['user_id' => $user['info']['user_id']]);
                 if($user_latest['code'] > 1){
@@ -179,9 +198,65 @@ class Order extends Base {
             return ['code'=>1,'msg'=>lang('model/order/pay_ok')];
         }catch (\Exception $e){
             Db::rollback();
-            return ['code'=>2004,'msg'=>$e->getMessage()];
+            // 异常细节（SQL/表名/字段/堆栈）只进日志，不回传给调用方/前端
+            \think\Log::error('Order notify failed order_code=' . $order_code . ' err=' . $e->getMessage());
+            return ['code'=>2004,'msg'=>lang('save_err')];
         }
 
+    }
+
+    /**
+     * 支付成功后核销订单关联的优惠券
+     * - 无券订单：无核销动作，成功
+     * - 已核销且绑定到本订单：幂等成功
+     * - 已核销但绑定到其他订单：拒绝
+     * - 未核销：原子 0->1 并绑定本订单
+     */
+    public function writeOffFromOrder($order, $order_code = '')
+    {
+        if (empty($order) || !is_array($order)) {
+            return ['code' => 1001, 'msg' => lang('param_err'), 'info' => ['coupon_user_id' => 0]];
+        }
+        $remarks = json_decode((string)$order['order_remarks'], true);
+        $cuId = 0;
+        if (is_array($remarks)) {
+            // 支持两种快照格式：扁平 coupon_user_id（充值）与嵌套 coupon.coupon_user_id（VIP）
+            if (!empty($remarks['coupon']['coupon_user_id'])) {
+                $cuId = intval($remarks['coupon']['coupon_user_id']);
+            } elseif (!empty($remarks['coupon_user_id'])) {
+                $cuId = intval($remarks['coupon_user_id']);
+            }
+        }
+        if ($cuId < 1) {
+            return ['code' => 1, 'msg' => lang('save_ok'), 'info' => ['coupon_user_id' => 0]];
+        }
+        $cu = model('CouponUser')->where('coupon_user_id', $cuId)->find();
+        if (empty($cu)) {
+            return ['code' => 2010, 'msg' => lang('coupon/not_yours'), 'info' => ['coupon_user_id' => $cuId]];
+        }
+        $cu = $cu->toArray();
+        if (intval($cu['coupon_user_status']) === 1) {
+            if ((string)$cu['order_code'] !== '' && (string)$order_code !== '' && (string)$cu['order_code'] !== (string)$order_code) {
+                // 已被其他订单核销：欺诈/重复使用，必须阻断支付完成
+                return ['code' => 2011, 'msg' => lang('coupon/used'), 'info' => ['coupon_user_id' => $cuId]];
+            }
+            return ['code' => 1, 'msg' => lang('save_ok'), 'info' => ['coupon_user_id' => $cuId]];
+        }
+        $now = time();
+        $aff = model('CouponUser')->where('coupon_user_id', $cuId)
+            ->where('coupon_user_status', 0)
+            ->update([
+                'coupon_user_status' => 1,
+                'coupon_user_use_time' => $now,
+                'order_code' => (string)$order_code,
+                'order_id' => intval($order['order_id']),
+            ]);
+        if ($aff === false || $aff < 1) {
+            // 并发竞争：可能已被另一笔并发订单核销，视为已使用
+            return ['code' => 2010, 'msg' => lang('coupon/used'), 'info' => ['coupon_user_id' => $cuId]];
+        }
+        Db::name('coupon')->where('coupon_id', $cu['coupon_id'])->setInc('coupon_used', 1);
+        return ['code' => 1, 'msg' => lang('save_ok'), 'info' => ['coupon_user_id' => $cuId]];
     }
 
 }

@@ -1798,6 +1798,7 @@ function mac_get_plog_type_text($data)
         10 => lang('plog_sign_milestone_reward'),
         11 => lang('plog_task_sign_reward'),
         12 => lang('plog_mall_exchange'),
+        13 => lang('plog_seckill'),
     ];
     return isset($arr[$data]) ? $arr[$data] : '';
 }

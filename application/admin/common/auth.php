@@ -1501,6 +1501,76 @@ return array (
         'controller' => 'cash',
         'action' => 'audit',
       ),
+      691 =>
+      array (
+        'show' => 1,
+        'name' => lang('menu/coupon'),
+        'controller' => 'coupon',
+        'action' => 'index',
+      ),
+      69101 =>
+      array (
+        'show' => 0,
+        'name' => '--'.lang('add'),
+        'controller' => 'coupon',
+        'action' => 'info',
+      ),
+      69102 =>
+      array (
+        'show' => 0,
+        'name' => '--'.lang('del'),
+        'controller' => 'coupon',
+        'action' => 'del',
+      ),
+      69103 =>
+      array (
+        'show' => 0,
+        'name' => '--'.lang('set'),
+        'controller' => 'coupon',
+        'action' => 'field',
+      ),
+      69104 =>
+      array (
+        'show' => 0,
+        'name' => '--'.lang('save'),
+        'controller' => 'coupon',
+        'action' => 'save',
+      ),
+      692 =>
+      array (
+        'show' => 1,
+        'name' => lang('menu/seckill'),
+        'controller' => 'seckill',
+        'action' => 'index',
+      ),
+      69201 =>
+      array (
+        'show' => 0,
+        'name' => '--'.lang('add'),
+        'controller' => 'seckill',
+        'action' => 'info',
+      ),
+      69202 =>
+      array (
+        'show' => 0,
+        'name' => '--'.lang('del'),
+        'controller' => 'seckill',
+        'action' => 'del',
+      ),
+      69203 =>
+      array (
+        'show' => 0,
+        'name' => '--'.lang('set'),
+        'controller' => 'seckill',
+        'action' => 'field',
+      ),
+      69204 =>
+      array (
+        'show' => 0,
+        'name' => '--'.lang('save'),
+        'controller' => 'seckill',
+        'action' => 'save',
+      ),
     ),
   ),
   7 => 

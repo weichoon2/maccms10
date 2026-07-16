@@ -7,11 +7,13 @@ use think\Validate;
 class Order extends Validate
 {
     protected $rule = [
-        'order_id'   => 'number|between:1,' . PHP_INT_MAX,
-        'order_code' => 'max:30',
-        'page'       => 'number|between:1,' . PHP_INT_MAX,
-        'limit'      => 'number|between:1,100',
-        'status'     => 'number|in:0,1',
+        'order_id'        => 'number|between:1,' . PHP_INT_MAX,
+        'order_code'      => 'max:30',
+        'page'            => 'number|between:1,' . PHP_INT_MAX,
+        'limit'           => 'number|between:1,100',
+        'status'          => 'number|in:0,1',
+        'price'           => 'float|egt:0',
+        'coupon_user_id'  => 'number|egt:0',
     ];
 
     protected $message = [
@@ -19,6 +21,10 @@ class Order extends Validate
     ];
 
     protected $scene = [
+        'create' => [
+            'price',
+            'coupon_user_id',
+        ],
         'get_list' => [
             'page',
             'limit',

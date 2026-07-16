@@ -2,6 +2,7 @@
 
 namespace app\api\controller;
 
+use app\common\util\CsrfGuard;
 use think\Db;
 use think\Request;
 use think\Url;
@@ -9,6 +10,7 @@ use think\Url;
 class User extends Base
 {
     use PublicApi;
+    use CsrfGuard;
     public function __construct()
     {
         parent::__construct();
@@ -767,6 +769,7 @@ class User extends Base
         $group_list = model('Group')->getCache();
         $scale = max(1, intval($GLOBALS['config']['pay']['scale']));
         $groups = [];
+        $now = time();
         foreach ($group_list as $vo) {
             if (!is_array($vo)) {
                 continue;
@@ -775,22 +778,28 @@ class User extends Base
                 continue;
             }
             $gid = intval($vo['group_id']);
-            $pd = intval($vo['group_points_day']);
-            $pw = intval($vo['group_points_week']);
-            $pm = intval($vo['group_points_month']);
-            $py = intval($vo['group_points_year']);
-            $groups[] = [
+            $row = [
                 'group_id' => $gid,
                 'group_name' => (string)$vo['group_name'],
-                'group_points_day' => $pd,
-                'group_points_week' => $pw,
-                'group_points_month' => $pm,
-                'group_points_year' => $py,
-                'price_day' => round($pd / $scale, 2),
-                'price_week' => round($pw / $scale, 2),
-                'price_month' => round($pm / $scale, 2),
-                'price_year' => round($py / $scale, 2),
             ];
+            foreach (['day', 'week', 'month', 'year'] as $pl) {
+                $plan = model('Group')->vipPlanPrice($vo, $pl);
+                $effPoints = intval($plan['effective_points']);
+                $row['group_points_' . $pl] = $effPoints;
+                $row['price_' . $pl] = round($effPoints / $scale, 2);
+                // 活动倒计时：活动有效时返回剩余秒数，否则 0
+                $countdown = 0;
+                $startKey = 'group_activity_start_time_' . $pl;
+                $endKey = 'group_activity_end_time_' . $pl;
+                $start = intval($vo[$startKey] ?? 0);
+                $end = intval($vo[$endKey] ?? 0);
+                if (intval($plan['is_activity']) === 1 && $end > $now) {
+                    $countdown = $end - $now;
+                }
+                $row['activity_countdown_' . $pl] = $countdown;
+                $row['is_activity_' . $pl] = intval($plan['is_activity']);
+            }
+            $groups[] = $row;
         }
 
         $u = $GLOBALS['user'];
@@ -844,6 +853,14 @@ class User extends Base
             return json(['code' => 1002, 'msg' => lang('index/not_login')]);
         }
 
+        $csrfErr = $this->checkCsrf();
+        if ($csrfErr !== null) return json($csrfErr);
+
+        $limited = $this->apiRateLimit('upgrade_order_create', intval($GLOBALS['user']['user_id']), 20, 60);
+        if ($limited !== true) {
+            return $limited;
+        }
+
         $param = $request->param();
         $group_id = intval($param['group_id'] ?? 0);
         $long = trim((string)($param['long'] ?? ''));
@@ -861,31 +878,68 @@ class User extends Base
             return json(['code' => 1004, 'msg' => lang('model/user/group_not_found')]);
         }
 
-        $point = intval($group_info['group_points_' . $long]);
+        // 活动价优先：active 时覆盖正常套餐积分
+        $plan = model('Group')->vipPlanPrice($group_info, $long);
+        $point = intval($plan['effective_points']);
+        $isActivity = intval($plan['is_activity']);
         if ($point < 1) {
             return json(['code' => 1005, 'msg' => lang('api/plan_not_available')]);
         }
         $scale = max(1, intval($GLOBALS['config']['pay']['scale']));
         $price = round($point / $scale, 2);
+        $normalPoint = intval($group_info['group_points_' . $long]);
+
+        // 优惠券抵扣（可选）
+        $couponUserId = intval($param['coupon_user_id'] ?? 0);
+        $priced = model('Coupon')->calculateOrderPrice('vip', $price, [
+            'user_id'        => intval($GLOBALS['user']['user_id']),
+            'coupon_user_id' => $couponUserId,
+            'group_id'       => $group_id,
+            'long'           => $long,
+        ]);
+        if ($priced['code'] > 1) {
+            return json($priced);
+        }
+        $payPrice = floatval($priced['info']['pay_price']);
 
         $remarks = [
             'biz' => 'member_upgrade',
             'group_id' => $group_id,
             'group_name' => $group_info['group_name'],
             'long' => $long,
-            'upgrade_points' => $point,
+            'upgrade_points' => $normalPoint,
+            'upgrade_effective_points' => $point,
+            'is_activity' => $isActivity,
+            'coupon' => ['coupon_user_id' => $couponUserId],
+            'pricing' => [
+                'scene' => 'vip',
+                'original_price' => $priced['info']['original_price'],
+                'coupon_discount' => $priced['info']['coupon_discount'],
+                'pay_price' => $priced['info']['pay_price'],
+            ],
         ];
 
         $data = [];
         $data['user_id'] = intval($GLOBALS['user']['user_id']);
         $data['order_code'] = 'UPG' . mac_get_uniqid_code();
-        $data['order_price'] = $price;
+        $data['order_price'] = $payPrice;
         $data['order_points'] = $point;
         $data['order_remarks'] = json_encode($remarks, JSON_UNESCAPED_UNICODE);
 
         $res = model('Order')->saveData($data);
         if ($res['code'] > 1) {
             return json($res);
+        }
+
+        // 预占券到本订单
+        if ($couponUserId > 0) {
+            $orderId = intval(\think\Db::name('Order')->where('order_code', $data['order_code'])->value('order_id'));
+            $resv = model('CouponUser')->reserveForOrder($couponUserId, intval($GLOBALS['user']['user_id']), $orderId, $data['order_code']);
+            if ($resv['code'] > 1) {
+                // 预占失败：清理刚创建的废弃订单，避免污染用户订单列表
+                \think\Db::name('Order')->where('order_code', $data['order_code'])->delete();
+                return json($resv);
+            }
         }
 
         $this_order = model('Order')->infoData(['order_code' => $data['order_code'], 'user_id' => $data['user_id']]);
@@ -901,7 +955,7 @@ class User extends Base
             'data' => [
                 'order_id' => intval($this_order['info']['order_id']),
                 'order_code' => $data['order_code'],
-                'order_price' => $price,
+                'order_price' => $payPrice,
                 'order_points' => $point,
                 'pay_url' => $pay_url,
             ],

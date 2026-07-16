@@ -137,4 +137,27 @@ class Group extends Base {
         return $cache;
     }
 
+    /**
+     * VIP 套餐活动价计算
+     * 活动有效（活动价 > 0 且当前时间在 start/end 窗口内）时用 group_activity_points_*
+     * 覆盖正常套餐积分，否则回退正常价。
+     * 返回 ['effective_points' => int, 'is_activity' => 0|1]
+     */
+    public function vipPlanPrice($group_info, $long)
+    {
+        $long = trim($long);
+        if (empty($group_info) || !is_array($group_info) || !in_array($long, ['day', 'week', 'month', 'year'], true)) {
+            return ['effective_points' => 0, 'is_activity' => 0];
+        }
+        $normal = intval($group_info['group_points_' . $long] ?? 0);
+        $actPoints = intval($group_info['group_activity_points_' . $long] ?? 0);
+        $start = intval($group_info['group_activity_start_time_' . $long] ?? 0);
+        $end = intval($group_info['group_activity_end_time_' . $long] ?? 0);
+        $now = time();
+        if ($actPoints > 0 && $start > 0 && $end > 0 && $now >= $start && $now <= $end) {
+            return ['effective_points' => $actPoints, 'is_activity' => 1];
+        }
+        return ['effective_points' => $normal, 'is_activity' => 0];
+    }
+
 }
