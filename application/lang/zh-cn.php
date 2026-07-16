@@ -3440,6 +3440,12 @@ https://www.baidu.com/123.jpg
     'admin/meilisearch/state_settings_bad' => '[!] 索引有文档但 settings 未配置 filterableAttributes，带 kind/recycle/status 过滤的搜索会失败。请先「一键初始化索引」。',
     // ResourceHub 资源站中心
     'admin/resourcehub/title' => '资源站中心',
+    'admin/apidoc/title' => 'API 文档',
+    'menu/apidoc' => 'API 文档',
+    'admin/apidoc/openapi_menu' => '--OpenAPI 规范',
+    'admin/apidoc/page_desc' => '在线浏览与调试本站 API 接口（基于 OpenAPI 3.0 规范）',
+    'admin/apidoc/api_base' => '接口入口',
+    'admin/apidoc/download_json' => '下载 OpenAPI JSON',
     'admin/resourcehub/check_ok' => '资源站可用',
     'admin/resourcehub/check_fail' => '资源站无法连接',
     'admin/resourcehub/get_types_fail' => '获取分类失败',

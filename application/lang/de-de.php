@@ -3123,6 +3123,12 @@ Hinweis: Wenn sowohl Blacklist als auch Whitelist ausgefüllt sind, werden beide
     'admin/meilisearch/state_settings_bad' => '[!] Index enthält Dokumente, aber filterableAttributes fehlt; Suche mit kind/recycle/status-Filter schlägt fehl. Zuerst „Ein-Klick-Index-Setup“.',
     // ==================== ResourceHub / BatchPlayer / DataReplace ====================
     'admin/resourcehub/title' => 'Ressourcen-Hub',
+    'admin/apidoc/title' => 'API-Dokumentation',
+    'menu/apidoc' => 'API-Dokumentation',
+    'admin/apidoc/openapi_menu' => '--OpenAPI-Spezifikation',
+    'admin/apidoc/page_desc' => 'API dieser Website online ansehen und testen (basierend auf OpenAPI 3.0)',
+    'admin/apidoc/api_base' => 'API-Basis',
+    'admin/apidoc/download_json' => 'OpenAPI-JSON herunterladen',
     'admin/resourcehub/check_ok' => 'Ressourcen-Seite verfügbar',
     'admin/resourcehub/check_fail' => 'Ressourcen-Seite nicht erreichbar',
     'admin/resourcehub/get_types_fail' => 'Kategorien konnten nicht abgerufen werden',

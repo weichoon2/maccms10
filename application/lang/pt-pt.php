@@ -3137,6 +3137,12 @@ https://www.baidu.com/123.jpg
     'admin/meilisearch/state_settings_bad' => '[!] O índice tem documentos mas filterableAttributes não está configurado; pesquisas com filtros kind/recycle/status falham. Execute primeiro a inicialização com um clique.',
     // ==================== ResourceHub / BatchPlayer / DataReplace ====================
     'admin/resourcehub/title' => 'Centro de Recursos',
+    'admin/apidoc/title' => 'Documentação da API',
+    'menu/apidoc' => 'Documentação da API',
+    'admin/apidoc/openapi_menu' => '--Especificação OpenAPI',
+    'admin/apidoc/page_desc' => 'Navegue e depure a API do site online (baseado na especificação OpenAPI 3.0)',
+    'admin/apidoc/api_base' => 'Base da API',
+    'admin/apidoc/download_json' => 'Transferir JSON OpenAPI',
     'admin/resourcehub/check_ok' => 'Site de recursos disponível',
     'admin/resourcehub/check_fail' => 'Site de recursos inacessível',
     'admin/resourcehub/get_types_fail' => 'Falha ao obter categorias',

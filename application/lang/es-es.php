@@ -3133,6 +3133,12 @@ Nota: Si se especifican listas negras y blancas, ambas se aplicarán simultánea
     'admin/meilisearch/state_settings_bad' => '[!] El índice tiene documentos pero falta filterableAttributes; las búsquedas con filtros kind/recycle/status fallan. Ejecute primero la inicialización con un clic.',
     // ==================== ResourceHub / BatchPlayer / DataReplace ====================
     'admin/resourcehub/title' => 'Centro de Recursos',
+    'admin/apidoc/title' => 'Documentación de API',
+    'menu/apidoc' => 'Documentación de API',
+    'admin/apidoc/openapi_menu' => '--Especificación OpenAPI',
+    'admin/apidoc/page_desc' => 'Explora y depura la API del sitio en línea (basado en la especificación OpenAPI 3.0)',
+    'admin/apidoc/api_base' => 'Base de la API',
+    'admin/apidoc/download_json' => 'Descargar OpenAPI JSON',
     'admin/resourcehub/check_ok' => 'Sitio de recursos disponible',
     'admin/resourcehub/check_fail' => 'Sitio de recursos inaccesible',
     'admin/resourcehub/get_types_fail' => 'Error al obtener categorías',

@@ -297,16 +297,30 @@ return array (
         'controller' => 'domain',
         'action' => 'export',
       ),
-      2924 => 
+      2924 =>
       array (
         'show' => 0,
         'name' => '--站群导入',
         'controller' => 'domain',
         'action' => 'import',
       ),
+      295 =>
+      array (
+        'show' => 1,
+        'name' => lang('admin/apidoc/title'),
+        'controller' => 'api_doc',
+        'action' => 'index',
+      ),
+      2951 =>
+      array (
+        'show' => 0,
+        'name' => lang('admin/apidoc/openapi_menu'),
+        'controller' => 'api_doc',
+        'action' => 'openapi',
+      ),
     ),
   ),
-  3 => 
+  3 =>
   array (
     'name' => lang('menu/base'),
     'icon' => 'xe64b',

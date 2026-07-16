@@ -3133,6 +3133,12 @@ Note: Si les listes noires et blanches sont remplies, les stratégies s\'appliqu
     'admin/meilisearch/state_settings_bad' => '[!] L\'index contient des documents mais filterableAttributes n\'est pas configuré ; les recherches avec filtres kind/recycle/status échouent. Lancez d\'abord l\'initialisation en un clic.',
     // ==================== ResourceHub / BatchPlayer / DataReplace ====================
     'admin/resourcehub/title' => 'Centre de Ressources',
+    'admin/apidoc/title' => 'Documentation API',
+    'menu/apidoc' => 'Documentation API',
+    'admin/apidoc/openapi_menu' => '--Spécification OpenAPI',
+    'admin/apidoc/page_desc' => 'Parcourir et tester l\'API du site en ligne (basé sur la spécification OpenAPI 3.0)',
+    'admin/apidoc/api_base' => 'Base de l\'API',
+    'admin/apidoc/download_json' => 'Télécharger le JSON OpenAPI',
     'admin/resourcehub/check_ok' => 'Site de ressource disponible',
     'admin/resourcehub/check_fail' => 'Site de ressource inaccessible',
     'admin/resourcehub/get_types_fail' => 'Échec de récupération des catégories',

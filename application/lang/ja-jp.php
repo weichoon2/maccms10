@@ -3137,6 +3137,12 @@ https://www.baidu.com/123.jpg
     'admin/meilisearch/state_settings_bad' => '[!] ドキュメントはあるが filterableAttributes 未設定。kind/recycle/status フィルター検索は失敗します。先に「ワンクリック索引初期化」を実行してください。',
     // ==================== ResourceHub / BatchPlayer / DataReplace ====================
     'admin/resourcehub/title' => 'リソースハブ',
+    'admin/apidoc/title' => 'API ドキュメント',
+    'menu/apidoc' => 'API ドキュメント',
+    'admin/apidoc/openapi_menu' => '--OpenAPI 仕様',
+    'admin/apidoc/page_desc' => '本サイトの API をオンラインで閲覧・デバッグ（OpenAPI 3.0 仕様準拠）',
+    'admin/apidoc/api_base' => 'API エンドポイント',
+    'admin/apidoc/download_json' => 'OpenAPI JSON をダウンロード',
     'admin/resourcehub/check_ok' => 'リソースサイト利用可能',
     'admin/resourcehub/check_fail' => 'リソースサイト接続不可',
     'admin/resourcehub/get_types_fail' => 'カテゴリ取得失敗',

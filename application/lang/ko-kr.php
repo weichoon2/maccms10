@@ -3136,6 +3136,12 @@ https://www.baidu.com/123.jpg
     'admin/meilisearch/state_settings_bad' => '[!] 문서는 있지만 filterableAttributes가 설정되지 않았습니다. kind/recycle/status 필터 검색이 실패합니다. 먼저「원클릭 인덱스 초기화」를 실행하세요.',
     // ==================== ResourceHub / BatchPlayer / DataReplace ====================
     'admin/resourcehub/title' => '리소스 허브',
+    'admin/apidoc/title' => 'API 문서',
+    'menu/apidoc' => 'API 문서',
+    'admin/apidoc/openapi_menu' => '--OpenAPI 명세',
+    'admin/apidoc/page_desc' => '본 사이트 API를 온라인으로 조회하고 디버깅 (OpenAPI 3.0 명세 기반)',
+    'admin/apidoc/api_base' => 'API 진입점',
+    'admin/apidoc/download_json' => 'OpenAPI JSON 다운로드',
     'admin/resourcehub/check_ok' => '리소스 사이트 사용 가능',
     'admin/resourcehub/check_fail' => '리소스 사이트 연결 불가',
     'admin/resourcehub/get_types_fail' => '카테고리 가져오기 실패',

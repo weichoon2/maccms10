@@ -3165,6 +3165,12 @@ Note: If both black and white lists are filled, both policies will take effect.'
     'admin/meilisearch/state_settings_bad' => '[!] Index has documents but filterableAttributes is missing; searches with kind/recycle/status filters will fail. Run One-Click Index Setup first.',
     // ==================== ResourceHub / BatchPlayer / DataReplace ====================
     'admin/resourcehub/title' => 'Resource Hub',
+    'admin/apidoc/title' => 'API Docs',
+    'menu/apidoc' => 'API Docs',
+    'admin/apidoc/openapi_menu' => '--OpenAPI Spec',
+    'admin/apidoc/page_desc' => 'Browse and debug this site\'s API online (based on the OpenAPI 3.0 spec)',
+    'admin/apidoc/api_base' => 'API base',
+    'admin/apidoc/download_json' => 'Download OpenAPI JSON',
     'admin/resourcehub/check_ok' => 'Resource site available',
     'admin/resourcehub/check_fail' => 'Resource site unreachable',
     'admin/resourcehub/get_types_fail' => 'Failed to get categories',
