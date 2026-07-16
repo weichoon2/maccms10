@@ -7,6 +7,14 @@
 - 红/黄/绿灯 + **一键修复**（可自动项）或跳转参数配置。  
 - 升级后若表单 **403**：可在 **系统 → 参数配置** 开启/关闭 CSRF，或追加 `security_csrf_admin_exempt` 豁免路由（默认含 `upload/*`）。
 
+### 防爬限流与多机
+
+- 实现：`SlidingWindowIpLimiter`（`AntiScrape` 调用）。  
+- **`cache.type=redis` 且为 phpredis `\Redis`**：跨节点固定窗口计数（优先 Lua 原子 `INCR`+`EXPIRE`；禁 SCRIPT 时回退 INCR 并愈合无 TTL 键）。  
+- **无 Redis / 非 Redis 驱动**：回退 `runtime/anti_scrape_rl/` 文件 + flock（仅单机）。  
+- ThinkPHP 官方 Redis 驱动注明业务侧 Redis Cluster 需另用 Redisd；该客户端类型下本限流会自动回退文件模式。  
+- 多机请共用同一 Redis，并保证各节点 `cache_flag` 一致（弱默认值会在安全体检中提示）。
+
 ## 文件安全检测 (`安全 → 文件安全检测` / `menu/safety_file`)
 
 - 扫描 `template/`、`runtime/`、`application/` 等处 **新增/可疑 PHP**，对比常见 **WebShell** 特征。  
