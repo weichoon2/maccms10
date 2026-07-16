@@ -1184,11 +1184,13 @@ class User extends Base
         $where['msg_time'] = ['gt',$stime];
         $where['msg_code'] = ['eq',$param['code']];
         $where['msg_type'] = ['eq', $param['type'] ];
+        $where['msg_to']   = ['eq', $param['to'] ];
+        $where['msg_status'] = ['eq', 0];
         $res = model('msg')->infoData($where);
         if($res['code'] >1){
             return ['code'=>9002,'msg'=>lang('model/user/msg_not_found')];
         }
-        return  ['code'=>1,'msg'=>'ok'];
+        return  ['code'=>1,'msg'=>'ok','msg_id'=>$res['info']['msg_id']];
     }
 
     public function send_msg($param)
@@ -1357,10 +1359,11 @@ class User extends Base
 
     public function findpass_reset($param)
     {
-        $to = htmlspecialchars(urldecode(trim($param['user_email'])));
-        if(empty($to)){
-            $to = htmlspecialchars(urldecode(trim($param['to'])));
+        $to_src = trim(isset($param['user_email']) ? $param['user_email'] : '');
+        if($to_src === ''){
+            $to_src = trim(isset($param['to']) ? $param['to'] : '');
         }
+        $to = htmlspecialchars(urldecode($to_src));
 
         $password_raw = trim($param['user_pwd']);
         $param['code'] = htmlspecialchars(urldecode(trim($param['code'])));
@@ -1376,10 +1379,12 @@ class User extends Base
         }
 
         $param['type'] = 2;
+        $param['to']   = $to_src;
         $res = $this->check_msg($param);
         if($res['code'] >1){
             return ['code'=>$res['code'],'msg'=>$res['msg']];
         }
+        $msg_id = $res['msg_id'];
 
         if($param['ac']=='email') {
 
@@ -1407,6 +1412,12 @@ class User extends Base
             if (!$user) {
                 return ['code' => 2008, 'msg' =>lang('model/user/phone_err')];
             }
+        }
+
+        // 原子作废验证码，防重放：仅当仍为未使用(0)时置为已使用(1)，避免并发重复重置
+        $consumed = Db::name('msg')->where(['msg_id'=>$msg_id,'msg_status'=>0])->update(['msg_status'=>1]);
+        if($consumed != 1){
+            return ['code'=>9002,'msg'=>lang('model/user/msg_not_found')];
         }
 
         $update = [];
