@@ -745,9 +745,18 @@ if(empty($col_list[$pre.'live'])){
     $sql .= ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='直播频道表';";
     $sql .= "\r";
 }
-// 插入预设直播分类数据
-$live_cate_count = \think\Db::name('live_category')->count();
-if(empty($live_cate_count)){
+// 插入预设直播分类数据（冪等：本次新建的表必空需插；已存在的表才安全查 count，避免升级时表尚未创建导致查询异常中断）
+$liveCateNeedInsert = false;
+if(empty($col_list[$pre.'live_category'])){
+    // 本次升级新建该表，必空，需插预设
+    $liveCateNeedInsert = true;
+}else{
+    $live_cate_count = \think\Db::name('live_category')->count();
+    if (empty($live_cate_count)) {
+        $liveCateNeedInsert = true;
+    }
+}
+if($liveCateNeedInsert){
     $sql .= "INSERT INTO `{$pre}live_category` (`cate_name`,`cate_en`,`cate_sort`,`cate_status`,`cate_time_add`,`cate_time`) VALUES ";
     $sql .= "('央视频道','cctv',0,1,0,0),";
     $sql .= "('卫视频道','wstv',1,1,0,0),";
@@ -755,9 +764,18 @@ if(empty($live_cate_count)){
     $sql .= "('港澳台','hktw',3,1,0,0);";
     $sql .= "\r";
 }
-// 插入预设直播数据(CCTV)
-$live_count = \think\Db::name('live')->count();
-if(empty($live_count)){
+// 插入预设直播数据(CCTV)（冪等：本次新建的表必空需插；已存在的表才安全查 count，避免升级时表尚未创建导致查询异常中断）
+$liveNeedInsert = false;
+if(empty($col_list[$pre.'live'])){
+    // 本次升级新建该表，必空，需插预设
+    $liveNeedInsert = true;
+}else{
+    $live_count = \think\Db::name('live')->count();
+    if (empty($live_count)) {
+        $liveNeedInsert = true;
+    }
+}
+if($liveNeedInsert){
     $sql .= "INSERT INTO `{$pre}live` (`cate_id`,`live_name`,`live_en`,`live_url`,`live_play_from`,`live_status`,`live_sort`,`live_time_add`,`live_time`,`live_blurb`) VALUES ";
     $sql .= "(1,'CCTV-1 综合','cctv1','HD\$https://pili-live-hls.cntv.myqcloud.com/live/cctv1hd.m3u8','hls',1,120,0,0,'CCTV-1 综合频道 中央电视台官方直播'),";
     $sql .= "(1,'CCTV-2 财经','cctv2','HD\$https://pili-live-hls.cntv.myqcloud.com/live/cctv2hd.m3u8','hls',1,119,0,0,'CCTV-2 财经频道 中央电视台官方直播'),";
