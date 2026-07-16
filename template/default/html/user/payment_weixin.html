@@ -27,6 +27,7 @@
 	    <div class="co-right co-right-bg">
 		<h2 data-lang="string_mac_wxzxcz">微信在线充值</h2>
 		<form method="post" target="_blank" action="{:url('user/gopay')}">
+			<input type="hidden" name="__token__" value="{$csrf_token}">
 			<input type="hidden" name="order_id" value="{$info.order_id}">
 			<input type="hidden" name="order_code" value="{$info.order_code}">
 		<div id="listCon">

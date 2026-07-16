@@ -157,6 +157,7 @@
 				</div>
 
 				<form method="post" action="{:url('user/gopay')}" id="payForm" target="_blank">
+					<input type="hidden" name="__token__" value="{$csrf_token}">
 					<input type="hidden" name="order_id" id="modal_order_id" value="">
 					<input type="hidden" name="order_code" id="modal_order_code_input" value="">
 					<input type="hidden" name="payment" id="payment_input" value="">
