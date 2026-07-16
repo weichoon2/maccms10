@@ -350,24 +350,6 @@ function mac_save_config_data($f, $arr = '')
     return true;
 }
 
-/**
- * 幂等注入定时任务到 extra/timming.php（仅在缺失时写入，不覆盖用户调整）
- * 用于安装与升级两处共享，避免重复代码。
- * @param string $key 任务键名
- * @param array $task 任务定义数组
- * @return void
- */
-function mac_inject_timming_task($key, array $task)
-{
-    $timming_file = APP_PATH . 'extra/timming.php';
-    $timming = config('timming');
-    if (!isset($timming[$key])) {
-        @chmod($timming_file, 0644);
-        $timming[$key] = $task;
-        mac_arr2file($timming_file, $timming);
-    }
-}
-
 function mac_replace_text($txt,$type=1)
 {
     if($type==1){

@@ -290,31 +290,55 @@ class Index extends Controller
 			return $this->error(lang('write_err_config'));
 		}
 
-		// 通知中心：VIP 到期提醒定時任務（冪等，僅在缺失時注入，不覆蓋用戶調整）
-		mac_inject_timming_task('notify_vip_expire', [
-			'id'      => 'notify_vip_expire',
-			'status'  => '0',
-			'name'    => 'notify_vip_expire',
-			'des'     => 'VIP到期提醒通知',
-			'file'    => 'notify',
-			'param'   => 'days=3',
-			'weeks'   => '1,2,3,4,5,6,0',
-			'hours'   => '00,06,12,18',
-			'runtime' => 0,
-		]);
-
-		// 视频定时上架任务（幂等，仅缺失时注入，不覆盖用户调整）
-		mac_inject_timming_task('vod_publish', [
-			'id'      => 'vod_publish',
-			'status'  => '1',
-			'name'    => 'vod_publish',
-			'des'     => '视频定时上架',
-			'file'    => 'vodpublish',
-			'param'   => 'limit=200',
-			'weeks'   => '1,2,3,4,5,6,0',
-			'hours'   => '00,01,02,03,04,05,06,07,08,09,10,11,12,13,14,15,16,17,18,19,20,21,22,23',
-			'runtime' => 0,
-		]);
+		// 定时任务幂等注入（通知中心 VIP 到期提醒 + 视频定时上架）：仅在缺失时补写，不覆盖用户调整。
+		// install/upgrade 路径均自包含：不依赖 common.php 的 mac_inject_timming_task / mac_arr2file，
+		// 只用 ThinkPHP 核心 config() 与 PHP 内建函数，与 application/data/update/database.php 保持一致。
+		{
+			$_timming_file = APP_PATH . 'extra/timming.php';
+			$_timming = config('timming');
+			if (!is_array($_timming)) {
+				$_timming = [];
+			}
+			$_timming_defaults = [
+				'notify_vip_expire' => [
+					'id'      => 'notify_vip_expire',
+					'status'  => '0',
+					'name'    => 'notify_vip_expire',
+					'des'     => 'VIP到期提醒通知',
+					'file'    => 'notify',
+					'param'   => 'days=3',
+					'weeks'   => '1,2,3,4,5,6,0',
+					'hours'   => '00,06,12,18',
+					'runtime' => 0,
+				],
+				'vod_publish' => [
+					'id'      => 'vod_publish',
+					'status'  => '1',
+					'name'    => 'vod_publish',
+					'des'     => '视频定时上架',
+					'file'    => 'vodpublish',
+					'param'   => 'limit=200',
+					'weeks'   => '1,2,3,4,5,6,0',
+					'hours'   => '00,01,02,03,04,05,06,07,08,09,10,11,12,13,14,15,16,17,18,19,20,21,22,23',
+					'runtime' => 0,
+				],
+			];
+			$_timming_changed = false;
+			foreach ($_timming_defaults as $_k => $_task) {
+				if (!isset($_timming[$_k])) {
+					$_timming[$_k] = $_task;
+					$_timming_changed = true;
+				}
+			}
+			if ($_timming_changed) {
+				@chmod($_timming_file, 0644);
+				file_put_contents($_timming_file, "<?php\nreturn " . var_export($_timming, true) . ';');
+				if (function_exists('opcache_invalidate')) {
+					@opcache_invalidate($_timming_file, true);
+				}
+			}
+			unset($_timming_file, $_timming, $_timming_defaults, $_timming_changed, $_k, $_task);
+		}
 
         // 导入系统初始数据库结构
         // 导入SQL
