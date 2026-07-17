@@ -57,7 +57,7 @@
         <div class="layui-card-header">{:lang('admin/monitor/test_push')}</div>
         <div class="layui-card-body">
             <div class="flex gap-5 overflow-x-auto">
-                {foreach name="['notify','email','webhook','telegram','dingtalk','wecom','serverchan']" item="ch"}
+                {foreach name="push_channels" item="ch"}
                 <button class="layui-btn layui-btn-sm layui-btn-primary test-push" data-ch="{$ch}">{$ch}</button>
                 {/foreach}
             </div>

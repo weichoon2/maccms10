@@ -370,6 +370,9 @@ class Monitor extends Base
         $list = Db::name('MonitorAlertRule')->order('rule_status desc,rule_id asc')->select();
         $this->assign('title', lang('admin/monitor/title_rule'));
         $this->assign('list', $list);
+        // 数组必须由控制器 assign，模板里不能把内联数组字面量当 {foreach} 的 name——
+        // 那会被编译成「常量 instanceof」，PHP < 7.3 直接致命。
+        $this->assign('push_channels', ['notify', 'email', 'webhook', 'telegram', 'dingtalk', 'wecom', 'serverchan']);
         $this->assign('heartbeat', $this->heartbeatStatus());
         return $this->fetch('monitor/rule');
     }
@@ -393,6 +396,9 @@ class Monitor extends Base
         $this->assign('title', lang('admin/monitor/title_rule'));
         $this->assign('info', $info);
         $this->assign('channels', ['notify', 'email', 'webhook', 'telegram', 'dingtalk', 'wecom', 'serverchan']);
+        // 同上：聚合方式/比较符列表也从控制器 assign，避免模板内联数组字面量。
+        $this->assign('agg_list', ['avg', 'max', 'min', 'sum', 'last', 'p95']);
+        $this->assign('op_list', ['gt', 'gte', 'lt', 'lte']);
         $this->assign('analytics_metrics', array_merge(
             \app\common\util\AnalyticsAnomaly::HOURLY_METRICS,
             \app\common\util\AnalyticsAnomaly::DAILY_METRICS

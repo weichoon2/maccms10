@@ -82,14 +82,14 @@
                     <label class="layui-form-label">{:lang('admin/monitor/f_condition')}</label>
                     <div class="layui-input-inline w150">
                         <select name="rule_agg" lay-filter="agg">
-                            {foreach name="['avg','max','min','sum','last','p95']" item="a"}
+                            {foreach name="agg_list" item="a"}
                             <option value="{$a}" {if condition="$info['rule_agg'] eq $a"}selected{/if}>{$a}</option>
                             {/foreach}
                         </select>
                     </div>
                     <div class="layui-input-inline w150">
                         <select name="rule_op">
-                            {foreach name="['gt','gte','lt','lte']" item="o"}
+                            {foreach name="op_list" item="o"}
                             <option value="{$o}" {if condition="$info['rule_op'] eq $o"}selected{/if}>{$o}</option>
                             {/foreach}
                         </select>
