@@ -254,22 +254,18 @@
                 <div>
                     <h2 class="inline-block font-semibold text-gray-800 ">
                         {:lang('admin/index/welcome/disk_space_usage')}</h2>
-                    <div class="hs-tooltip hover:z-10 inline-block">
+                    <span class="mac-hover-tip inline-block align-middle ml-1 text-gray-500"
+                        tabindex="0"
+                        data-title="{:lang('admin/index/welcome/disk_detail_tips')}"
+                        aria-label="{:lang('admin/index/welcome/disk_detail_tips')}">
                         <svg class="flex-shrink-0 size-4 " xmlns="http://www.w3.org/2000/svg" width="24" height="24"
                             viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                            stroke-linecap="round" stroke-linejoin="round">
+                            stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                             <circle cx="12" cy="12" r="10"></circle>
                             <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
                             <path d="M12 17h.01"></path>
                         </svg>
-                        <span
-                            class="hs-tooltip-content hs-tooltip-shown:opacity-100 hs-tooltip-shown:visible opacity-0 transition-opacity invisible z-10 py-1 px-2 bg-gray-900 text-xs font-medium text-white rounded-lg shadow-sm  hidden"
-                            role="tooltip"
-                            style="position: fixed; inset: auto auto 0px 0px; margin: 0px; transform: translate(1110px, -600px);"
-                            data-popper-placement="top">
-                            {:lang('admin/index/welcome/disk_detail_tips')}
-                        </span>
-                    </div>
+                    </span>
                 </div>
             </div>
             <!-- End Header -->
@@ -303,19 +299,19 @@
                                         </span>
                                     </div>
                                     <div class="flex items-center">
-                                        <div class="flex w-full h-2 bg-stone-200 rounded-full overflow-hidden  text-xs text-center hs-tooltip hover:z-10"
-                                            role="progressbar" aria-valuenow="60" aria-valuemin="0" aria-valuemax="100">
-                                            <div class="flex flex-col justify-center overflow-hidden bg-green-600 text-xs text-white text-center rounded-full whitespace-nowrap"
-                                                style="width:{$disk_data[2]}%" id="chart_{$disk_count}"></div>
-                                            <span id="disk_data_{$disk_count}"
-                                                class="hs-tooltip-content hs-tooltip-shown:opacity-100 hs-tooltip-shown:visible opacity-0 transition-opacity invisible z-10 py-1 px-2 bg-gray-900 text-xs font-medium text-white rounded-lg shadow-sm  hidden"
-                                                role="tooltip"
-                                                style="position: fixed; inset: auto auto 0px 0px; margin: 0px; transform: translate(1110px, -600px);"
-                                                data-popper-placement="top">
-                                                {$disk_data[1]-$disk_data[0]} GB/{$disk_data[1]} GB
-                                            </span>
+                                        <div id="disk_data_{$disk_count}"
+                                            class="mac-hover-tip w-full"
+                                            role="progressbar"
+                                            tabindex="0"
+                                            aria-valuenow="{$disk_data[2]}"
+                                            aria-valuemin="0"
+                                            aria-valuemax="100"
+                                            data-title="{$disk_data[1]-$disk_data[0]} GB/{$disk_data[1]} GB">
+                                            <div class="flex w-full h-2 bg-stone-200 rounded-full overflow-hidden text-xs text-center">
+                                                <div class="flex flex-col justify-center overflow-hidden bg-green-600 text-xs text-white text-center rounded-full whitespace-nowrap"
+                                                    style="width:{$disk_data[2]}%" id="chart_{$disk_count}"></div>
+                                            </div>
                                         </div>
-
                                     </div>
                                 </div>
                                 <span id="disk_usage_{$disk_count}" class="text-[24px] font-semibold text-[#1F2937]">
@@ -435,15 +431,11 @@
     <div class="flex flex-col bg-white border border-gray-200 shadow-sm rounded-xl">
         <!-- Header -->
         <div class="Browsers-card-header">
-            <!-- Select -->
             <div class="relative inline-block">
-                <div class="hs-select relative">
-                    <h2 class="inline-block font-semibold text-gray-800 ">
-                        {:lang('admin/index/welcome/seven_day_visit_data')}
-                    </h2>
-                </div>
+                <h2 class="inline-block font-semibold text-gray-800 ">
+                    {:lang('admin/index/welcome/seven_day_visit_data')}
+                </h2>
             </div>
-            <!-- End Select -->
             <div class="md:justify-end">
                 <div class="w-48">
                     <input type="text" class="layui-input" id="date-range" placeholder="请选择日期范围">
@@ -1089,7 +1081,9 @@
                     $('#mem_detail').text(roundTo(data.mem_used, 2) + ' MB/' + roundTo(data.mem_total, 2) + ' MB');
                     $('#chart_' + i).css('width', data.disk_datas[key][2] + '%');
                     $('#disk_usage_' + i).text(data.disk_datas[key][2] + '%');
-                    $('#disk_data_' + i).text(roundTo(data.disk_datas[key][1] - data.disk_datas[key][0], 2) + ' GB/' + roundTo(data.disk_datas[key][1], 2) + ' GB');
+                    $('#disk_data_' + i)
+                        .attr('aria-valuenow', data.disk_datas[key][2])
+                        .attr('data-title', roundTo(data.disk_datas[key][1] - data.disk_datas[key][0], 2) + ' GB/' + roundTo(data.disk_datas[key][1], 2) + ' GB');
                     i++;
                 }
             },

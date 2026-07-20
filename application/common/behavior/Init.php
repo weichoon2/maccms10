@@ -158,6 +158,30 @@ class Init
             Cache::$handler = null;
         }
 
+        // 应用层修正静态资源替换串，避免改 thinkphp/View.php。
+        // View 构造中历史写法 "$root . $static_path = '/static_new/'" 因运算符优先级
+        // 实际变成给 $static_path 赋带尾斜杠的值，模板 __STATIC__/js 会渲染成 //js。
+        // view_replace_str 在 View::instance 时后合并，可覆盖内核默认值。
+        $req = \think\Request::instance();
+        $base = $req->root();
+        $root = strpos($base, '.') ? ltrim(dirname($base), DS) : $base;
+        if ($root !== '') {
+            $root = '/' . ltrim($root, '/');
+        }
+        $nv = isset($config['site']['new_version']) ? $config['site']['new_version'] : null;
+        $useNewStatic = ($nv == 1 || !isset($config['site']['new_version']) || (empty($nv) && $nv != 0));
+        $staticPath = $useNewStatic ? '/static_new' : '/static';
+        $staticReplace = array(
+            '__STATIC__' => $root . $staticPath,
+            '__CSS__'    => $root . $staticPath . '/css',
+            '__JS__'     => $root . $staticPath . '/js',
+        );
+        $existReplace = config('view_replace_str');
+        if (!is_array($existReplace)) {
+            $existReplace = array();
+        }
+        config('view_replace_str', array_merge($existReplace, $staticReplace));
+
         $GLOBALS['config'] = $config;
     }
 }
