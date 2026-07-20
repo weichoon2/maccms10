@@ -37,7 +37,8 @@
 
 ## 应用市场 (`应用 → 应用市场` / `menu/addon`)
 
-- 安装/卸载/升级 **插件**：可能修改 **数据库、钩子、菜单**。  
+- **本机**：上传本地 zip、启停、配置、卸载（加固见 `AddonSecureInstaller`）。旧 `api.maccms.com` **只读**丰富列表元数据（不装包）。  
+- **云市场**：`addon_cloud.status=1` 时 RS256 签目录一键安装；`mock=1` 可读本地骨架目录。协议：`application/data/addon/docs/addon-marketplace-protocol.md`。  
 - **生产环境**：先在 **副本站**测插件；备份后安装。  
 - 卸载按 **作者说明**执行，避免残留钩子导致 **白屏**。
 

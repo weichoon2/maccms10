@@ -89,6 +89,16 @@ class Base extends All
             }
         }
 
+        // 插件云市场：已授权插件列表的子管理员可拉目录；安装/刷新仍走独立权限点
+        if ($c === 'addon' && $a === 'cloudcatalog') {
+            $authStr = ',' . (string)$this->_admin['admin_auth'] . ',';
+            if (strpos($authStr, ',addon/cloudcatalog,') !== false
+                || strpos($authStr, ',addon/downloaded,') !== false
+                || strpos($authStr, ',addon/index,') !== false) {
+                return true;
+            }
+        }
+
         $auths = $this->_admin['admin_auth'] . ',index/index,index/welcome,index/logout,';
         $cur = ','.$c.'/'.$a.',';
         if($this->_admin['admin_id'] =='1'){

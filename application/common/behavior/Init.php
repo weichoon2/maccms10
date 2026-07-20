@@ -37,6 +37,25 @@ class Init
                 'cache_ttl' => '10800',
             ];
         }
+        if (!isset($config['addon_cloud']) || !is_array($config['addon_cloud'])) {
+            $config['addon_cloud'] = [
+                'status' => '0',
+                'catalog_url' => 'https://api.maccms.ai/addons/catalog.json',
+                'cache_ttl' => '10800',
+                'rate_limit' => '10',
+                'audit_max' => '200',
+                'legacy_catalog' => '1',
+                'mock' => '0',
+            ];
+        } else {
+            // 只补缺失键，不覆盖站长已设值（含显式 0）
+            if (!array_key_exists('legacy_catalog', $config['addon_cloud'])) {
+                $config['addon_cloud']['legacy_catalog'] = '1';
+            }
+            if (!array_key_exists('mock', $config['addon_cloud'])) {
+                $config['addon_cloud']['mock'] = '0';
+            }
+        }
         $domain = config('domain');
 
         $isMobile = 0;

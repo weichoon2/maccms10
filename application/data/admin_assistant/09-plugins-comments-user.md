@@ -5,7 +5,9 @@
 1. **后台 → 插件 / 应用**（名称依版本）：上传或安装 zip，按向导启用。  
 2. 插件常写入 **`addons/插件标识/`**，并可能在 **管理员权限** 中新增菜单——需在 **角色** 里勾选。  
 3. **升级 CMS 内核**前，确认插件兼容性；先在测试环境演练。  
-4. 卸载插件遵循插件作者说明（有的需执行卸载 SQL），避免手写删目录遗留钩子。
+4. 卸载插件遵循插件作者说明（有的需执行卸载 SQL），避免手写删目录遗留钩子。  
+5. **开发插件**：见站内文档 [`application/data/addon/docs/addon-developer.md`](../addon/docs/addon-developer.md)（`info.ini`、钩子、SQL、配置 schema、权限约定）。
+6. **云市场（客户端骨架）**：`addon_cloud.status=1` 后走 RS256 签目录一键安装；`mock=1` 可联调空/本地目录。旧 `api.maccms.com` **只读并存**（丰富本机列表，不装包）。协议：[`addon-marketplace-protocol.md`](../addon/docs/addon-marketplace-protocol.md)。
 
 ## 评论 / 留言
 

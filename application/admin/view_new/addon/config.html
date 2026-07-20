@@ -1,32 +1,45 @@
 {include file="../../../application/admin/view_new/public/head" /}
 <div class="page-container p10">
-    <div class="showpic" style="display:none;"><img class="showpic_img" width="120" height="160"></div>
+    <div class="showpic" style="display:none;"><img class="showpic_img" width="120" height="160" alt=""></div>
 
+    <blockquote class="layui-elem-quote layui-quote-nm">
+        <strong>{$info.title|mac_filter_xss}</strong>
+        <span class="layui-badge-rim">{$info.name|mac_filter_xss}</span>
+        {if !empty($info.version)} · {:lang('ver')}: {$info.version|mac_filter_xss}{/if}
+        <br>
+        <span class="layui-word-aux">{:lang('admin/addon/config_refresh_tip')}</span>
+    </blockquote>
+
+    {if empty($config)}
+    <div class="layui-bg-gray" style="padding:24px;text-align:center;">
+        {:lang('admin/addon/config_empty')}
+    </div>
+    {else/}
     <form class="layui-form layui-form-pane" method="post" action="">
-        <input id="admin_id" name="name" type="hidden" value="{$info.name}">
+        <input type="hidden" name="__token__" value="{$Request.token}" />
+        <input name="name" type="hidden" value="{$info.name|mac_filter_xss}">
 
         {foreach $config as $item}
         <div class="layui-form-item">
-            <label class="layui-form-label">{$item.title}：</label>
+            <label class="layui-form-label">{$item.title|mac_filter_xss}：</label>
                 {switch $item.type}
                 {case string}
                 <div class="layui-input-inline w600 ">
-                <input type="text" name="row[{$item.name}]" value="{$item.value}" class="layui-input" data-rule="{$item.rule}" data-tip="{$item.tip}" {$item.extend} />
+                <input type="text" name="row[{$item.name}]" value="{$item.value}" class="layui-input" data-rule="{$item.rule}" data-tip="{$item.tip}" {if condition="isset($item['rule']) && strpos($item['rule'],'required')!==false"}lay-verify="required"{/if} {$item.extend} />
                 </div>
             {/case}
                 {case text}
                 <div class="layui-input-inline w600 ">
-                <textarea name="row[{$item.name}]" class="layui-input" data-rule="{$item.rule}" rows="5" data-tip="{$item.tip}" {$item.extend}>{$item.value}</textarea>
+                <textarea name="row[{$item.name}]" class="layui-input" data-rule="{$item.rule}" rows="5" data-tip="{$item.tip}" {if condition="isset($item['rule']) && strpos($item['rule'],'required')!==false"}lay-verify="required"{/if} {$item.extend}>{$item.value}</textarea>
                 </div>
                 {/case}
                 {case array}
-                  <!-- 数组类型标签开始 -->
                   <div class="layui-input-inline w700 ">
                      <div style="padding-left: 10px;">
                         {foreach name="item.value" item="vo" }
                            <div class=" w700 ">
                               <div class="layui-form-item">
-                                 <label class="layui-form-label">{$key}:</label>
+                                 <label class="layui-form-label">{$key|mac_filter_xss}:</label>
                                  <div class="layui-input-block">
                                     <input type="text" name="row[{$item.name}][{$key}]" value="{$vo}" class="layui-input w500"  />
                                  </div>
@@ -35,17 +48,15 @@
                         {/foreach}
                      </div>
                   </div>
-                  <!-- 数组类型标签结束 -->
-
                 {/case}
                 {case datetime}
             <div class="layui-input-inline w600 ">
-                <input type="text" name="row[{$item.name}]" value="{$item.value}" class="layui-input datetimepicker" data-tip="{$item.tip}" data-rule="{$item.rule}" {$item.extend} />
+                <input type="text" name="row[{$item.name}]" value="{$item.value}" class="layui-input datetimepicker" data-tip="{$item.tip}" data-rule="{$item.rule}" {if condition="isset($item['rule']) && strpos($item['rule'],'required')!==false"}lay-verify="required"{/if} {$item.extend} />
                 </div>
                 {/case}
                 {case number}
             <div class="layui-input-inline w600 ">
-                <input type="number" name="row[{$item.name}]" value="{$item.value}" class="layui-input" data-tip="{$item.tip}" data-rule="{$item.rule}" {$item.extend} />
+                <input type="number" name="row[{$item.name}]" value="{$item.value}" class="layui-input" data-tip="{$item.tip}" data-rule="{$item.rule}" {if condition="isset($item['rule']) && strpos($item['rule'],'required')!==false"}lay-verify="required"{/if} {$item.extend} />
                 </div>
                 {/case}
                 {case checkbox}
@@ -65,7 +76,7 @@
                 {case value="select" break="0"}{/case}
                 {case value="selects"}
             <div class="layui-input-inline w700 ">
-                <select name="row[{$item.name}]{$item.type=='selects'?'[]':''}" class="layui-input selectpicker" data-tip="{$item.tip}" {$item.type=='selects'?'multiple':''}>
+                <select name="row[{$item.name}]{$item.type=='selects'?'[]':''}" class="layui-input selectpicker" data-tip="{$item.tip}" {$item.type=='selects'?'multiple':''} {if condition="isset($item['rule']) && strpos($item['rule'],'required')!==false"}lay-verify="required"{/if}>
                     {foreach name="item.content" item="vo"}
                     <option value="{$key}" {in name="key" value="$item.value"}selected{/in}>{$vo}</option>
                     {/foreach}
@@ -75,34 +86,32 @@
                 {case value="image" break="0"}{/case}
                 {case value="images"}
             <div class="layui-input-inline w600 ">
-                <input id="c-{$item.name}" class="layui-input upload-input upload-img" size="37" name="row[{$item.name}]" type="text" value="{$item.value}" data-tip="{$item.tip}">
+                <input id="c-{$item.name}" class="layui-input upload-input upload-img" size="37" name="row[{$item.name}]" type="text" value="{$item.value}" data-tip="{$item.tip}" {if condition="isset($item['rule']) && strpos($item['rule'],'required')!==false"}lay-verify="required"{/if}>
                 </div>
             <div class="layui-input-inline w100">
-                <button type="button" class="layui-btn layui-upload" lay-data="{data:{thumb:0,thumb_class:''}}" >上传</button>
+                <button type="button" class="layui-btn layui-upload" lay-data="{data:{thumb:0,thumb_class:''}}" >{:lang('upload')}</button>
                 </div>
-
                 {/case}
                 {case value="file" break="0"}{/case}
                 {case value="files"}
             <div class="layui-input-inline w600 ">
-                <input id="c-{$item.name}" class="layui-input upload-input" size="37" name="row[{$item.name}]" type="text" value="{$item.value}" data-tip="{$item.tip}">
+                <input id="c-{$item.name}" class="layui-input upload-input" size="37" name="row[{$item.name}]" type="text" value="{$item.value}" data-tip="{$item.tip}" {if condition="isset($item['rule']) && strpos($item['rule'],'required')!==false"}lay-verify="required"{/if}>
             </div>
             <div class="layui-input-inline w100">
-                <button type="button" class="layui-btn layui-upload" lay-data="{data:{thumb:0,thumb_class:''}}" >上传</button>
+                <button type="button" class="layui-btn layui-upload" lay-data="{data:{thumb:0,thumb_class:''}}" >{:lang('upload')}</button>
             </div>
-
                 {/case}
                 {case bool}
                 <div class="layui-input-inline">
-                <input id="row[{$item.name}]-yes" name="row[{$item.name}]" type="radio" value="1" {$item.value?'checked':''} data-tip="{$item.tip}" title="是"/>
-                <input id="row[{$item.name}]-no" name="row[{$item.name}]" type="radio" value="0" {$item.value?'':'checked'} data-tip="{$item.tip}" title="否"/>
+                <input id="row[{$item.name}]-yes" name="row[{$item.name}]" type="radio" value="1" {$item.value?'checked':''} data-tip="{$item.tip}" title="{:lang('yes')}"/>
+                <input id="row[{$item.name}]-no" name="row[{$item.name}]" type="radio" value="0" {$item.value?'':'checked'} data-tip="{$item.tip}" title="{:lang('no')}"/>
                 </div>
                 {/case}
                 {/switch}
-            <div class="layui-form-mid layui-word-aux">{$item.tip}</div>
+            {if !empty($item.tip)}
+            <div class="layui-form-mid layui-word-aux">{$item.tip|mac_filter_xss}</div>
+            {/if}
             </div>
-
-
         {/foreach}
 
         <div class="layui-form-item center">
@@ -112,16 +121,17 @@
             </div>
         </div>
     </form>
+    {/if}
 
 </div>
 {include file="../../../application/admin/view_new/public/foot" /}
 
 <script type="text/javascript">
     layui.use(['form','upload', 'layer'], function () {
-        // 操作对象
         var form = layui.form
                 , layer = layui.layer
-                , $ = layui.jquery, upload = layui.upload;;
+                , $ = layui.jquery
+                , upload = layui.upload;
 
         upload.render({
             elem: '.layui-upload'
@@ -141,10 +151,8 @@
                     input.siblings('img').attr('src', res.data.file).show();
                 }
                 input.val(res.data.file);
-
             }
         });
-
 
         $('.upload-img').hover(function (e){
             var e = window.event || e;
@@ -158,9 +166,7 @@
         },function (e){
             $(".showpic").css("display","none");
         });
-
     });
-
 </script>
 
 </body>

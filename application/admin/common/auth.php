@@ -2234,6 +2234,27 @@ return array (
         'controller' => 'addon',
         'action' => 'add',
       ),
+      11108 => 
+      array (
+        'show' => 0,
+        'name' => '--插件云目录刷新',
+        'controller' => 'addon',
+        'action' => 'cloudrefresh',
+      ),
+      11109 => 
+      array (
+        'show' => 0,
+        'name' => '--插件云安装',
+        'controller' => 'addon',
+        'action' => 'cloudinstall',
+      ),
+      11110 => 
+      array (
+        'show' => 0,
+        'name' => '--插件云目录',
+        'controller' => 'addon',
+        'action' => 'cloudcatalog',
+      ),
     ),
   ),
   14 =>

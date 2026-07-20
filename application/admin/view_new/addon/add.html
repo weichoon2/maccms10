@@ -30,12 +30,20 @@
 
         upload.render({
             elem: '.layui-upload'
-            ,url: "{:url('addon/local')}?__token__=" + $('#token').val()
+            ,url: "{:url('addon/local')}"
             ,method: 'post'
             ,exts:'zip'
+            ,data: {
+                __token__: function () {
+                    return $('#token').val();
+                }
+            }
             ,before: function(input) {
                 layer.msg("{:lang('upload_ing')}", {time:3000000});
             },done: function(res, index, upload) {
+                if (res && res.data && res.data.__token__) {
+                    $('#token').val(res.data.__token__);
+                }
                 var obj = this.item;
                 if (res.code == 0) {
                     layer.msg(res.msg);
