@@ -54,7 +54,7 @@
 	<script type="text/javascript" src="/static/player/dplayer/hls.min.js"></script>
 	<script type="text/javascript" src="/static/player/dplayer/dash.all.min.js"></script>
 	<script type="text/javascript" src="/static/player/dplayer/webtorrent.min.js"></script>
-	<script type="text/javascript" src="/static/player/dplayer/DPlayer.min.js"></script>
+	<script type="text/javascript" src="/static/player/dplayer/DPlayer.min.js" onerror="try{parent.postMessage({source:'mac-player',type:'play_fail',reason:'script_load'},location.origin)}catch(e){}"></script>
 </head>
 <body marginwidth="0" marginheight="0">
 <div id="playerCnt"></div>
@@ -65,6 +65,43 @@
 	var PLAYBACK_SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 2];
 	var LS_SPEED_KEY = 'mac_dplayer_playback_speed';
 	var LS_QUALITY_KEY = 'mac_dplayer_quality_name';
+	var playOkSent = false;
+	var playFailSent = false;
+	var canplayTimer = null;
+
+	function clearCanplayTimeout() {
+		if (canplayTimer) {
+			clearTimeout(canplayTimer);
+			canplayTimer = null;
+		}
+	}
+
+	function notifyPlayOk() {
+		if (playOkSent) return;
+		playOkSent = true;
+		playFailSent = false;
+		clearCanplayTimeout();
+		try {
+			parent.postMessage({ source: 'mac-player', type: 'play_ok' }, location.origin);
+		} catch (eOk) {}
+	}
+
+	function notifyPlayFail(reason) {
+		if (playFailSent || playOkSent) return;
+		playFailSent = true;
+		clearCanplayTimeout();
+		try {
+			parent.postMessage(
+				{ source: 'mac-player', type: 'play_fail', reason: reason || 'error' },
+				location.origin
+			);
+		} catch (eFail) {}
+	}
+
+	if (typeof DPlayer === 'undefined') {
+		notifyPlayFail('script_load');
+		return;
+	}
 
 	function detectVideoType(url) {
 		url = String(url || '');
@@ -338,7 +375,13 @@
 		};
 	}
 
-	var dp = new DPlayer(dpOpts);
+	var dp;
+	try {
+		dp = new DPlayer(dpOpts);
+	} catch (eInit) {
+		notifyPlayFail('error');
+		return;
+	}
 	applySavedSpeed(dp);
 	bindSpeedMemory(dp);
 	bindQualityMemory(dp);
@@ -381,38 +424,6 @@
 	var pendingSeekPoint = null;
 	var hasUserPlayed = false;
 	var canplayTimeoutMs = 15000;
-	var canplayTimer = null;
-	var playOkSent = false;
-	var playFailSent = false;
-
-	function notifyPlayOk() {
-		if (playOkSent) return;
-		playOkSent = true;
-		playFailSent = false;
-		clearCanplayTimeout();
-		try {
-			parent.postMessage({ source: 'mac-player', type: 'play_ok' }, location.origin);
-		} catch (eOk) {}
-	}
-
-	function notifyPlayFail(reason) {
-		if (playFailSent || playOkSent) return;
-		playFailSent = true;
-		clearCanplayTimeout();
-		try {
-			parent.postMessage(
-				{ source: 'mac-player', type: 'play_fail', reason: reason || 'error' },
-				location.origin
-			);
-		} catch (eFail) {}
-	}
-
-	function clearCanplayTimeout() {
-		if (canplayTimer) {
-			clearTimeout(canplayTimer);
-			canplayTimer = null;
-		}
-	}
 
 	function armCanplayTimeout() {
 		clearCanplayTimeout();

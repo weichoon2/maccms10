@@ -78,7 +78,7 @@
     transform: translate(-50%, -50%);
 	}
 	</style>
-	<script type="text/javascript" src="/static/player/videojs/video.min.js"></script>
+	<script type="text/javascript" src="/static/player/videojs/video.min.js" onerror="try{parent.postMessage({source:'mac-player',type:'play_fail',reason:'script_load'},location.origin)}catch(e){}"></script>
 	<script type="text/javascript" src="/static/player/videojs/CommentCoreLibrary.min.js"></script>
 	<script type="text/javascript" src="/static/player/videojs/videojs-danmaku.js"></script>
 </head>
@@ -98,6 +98,20 @@
 	var LS_SPEED_KEY = 'mac_videojs_playback_speed';
 	var LS_QUALITY_KEY = 'mac_videojs_quality_name';
 	var MSG_PARENT = 'mac-play-parent';
+
+	function notifyPlayFail(reason) {
+		try {
+			parent.postMessage(
+				{ source: 'mac-player', type: 'play_fail', reason: reason || 'error' },
+				location.origin
+			);
+		} catch (eFail) {}
+	}
+
+	if (typeof videojs === 'undefined') {
+		notifyPlayFail('script_load');
+		return;
+	}
 
 	function detectMime(url) {
 		url = String(url || '');
@@ -212,7 +226,9 @@
 		playbackRates: PLAYBACK_SPEEDS,
 	};
 
-	var player = videojs('playerCnt', options, function onPlayerReady() {
+	var player;
+	try {
+		player = videojs('playerCnt', options, function onPlayerReady() {
 		var p = this;
 		var lastProgressPost = 0;
 		var pendingSeekPoint = null;
@@ -456,6 +472,10 @@
 			p.danmaku();
 		}
 	});
+	} catch (eInit) {
+		notifyPlayFail('error');
+		return;
+	}
 })();
 </script>
 </body>

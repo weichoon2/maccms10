@@ -7,7 +7,9 @@
     {if condition="($obj.vod_copyright neq 1 || $GLOBALS['config']['app']['copyright_status'] neq 1) && !$obj.vod_lock && $popedom.code elt 1 && ($obj['vod_play_list'][$param['sid']]['player_info']['from'] eq 'dplayer' || $obj['vod_play_list'][$param['sid']]['player_info']['from'] eq 'videojs')"}
     <link rel="stylesheet" type="text/css" href="{$maccms.path_tpl}/asset/css/vod-play-social.css?v=202604271" />
     <link rel="stylesheet" type="text/css" href="{$maccms.path_tpl}/asset/css/vod-play-progress.css?v=202606246" />
-    <link rel="stylesheet" type="text/css" href="{$maccms.path_tpl}/asset/css/vod-play-failover.css?v=202606262" />
+    {/if}
+    {if condition="($obj.vod_copyright neq 1 || $GLOBALS['config']['app']['copyright_status'] neq 1) && !$obj.vod_lock && $popedom.code elt 1"}
+    <link rel="stylesheet" type="text/css" href="{$maccms.path_tpl}/asset/css/vod-play-failover.css?v=202607182" />
     {/if}
 </head>
 <body>
@@ -52,6 +54,19 @@
                                 </div>
                             </div>
                             {include file="module/vod_play_quality_vars" /}
+                            <script type="application/json" id="vod-play-failover-config">{"enabled":true,"apiBase":"{:rtrim($maccms.path,'/').'/api.php'}","vodId":{$obj.vod_id},"sid":{$param.sid},"nid":{$param.nid},"canplayTimeoutMs":15000,"playFrom":"{$obj['vod_play_list'][$param['sid']]['player_info']['from']}"}</script>
+                            <script>
+                            (function (w) {
+                              w.__macPlayerScriptFail = null;
+                              w.addEventListener('error', function (ev) {
+                                var t = ev && ev.target;
+                                if (!t || !t.tagName || String(t.tagName).toUpperCase() !== 'SCRIPT') return;
+                                var src = String(t.src || '');
+                                if (src.indexOf('/static/player/') === -1) return;
+                                w.__macPlayerScriptFail = { src: src, at: Date.now() };
+                              }, true);
+                            })(window);
+                            </script>
                             {$player_data}{$player_js}
                             {/if}
                         </div>
@@ -129,7 +144,6 @@
                             {if condition="($obj.vod_copyright neq 1 || $GLOBALS['config']['app']['copyright_status'] neq 1) && !$obj.vod_lock && $popedom.code elt 1 && ($obj['vod_play_list'][$param['sid']]['player_info']['from'] eq 'dplayer' || $obj['vod_play_list'][$param['sid']]['player_info']['from'] eq 'videojs')"}
                             <script type="application/json" id="vod-play-social-config">{"enabled":true,"chatEnabled":{if condition="$play_chatroom_enabled"}true{else/}false{/if},"apiBase":"{:rtrim($maccms.path,'/').'/api.php'}","vodId":{$obj.vod_id},"sid":{$param.sid},"nid":{$param.nid},"playerFrom":"{$obj['vod_play_list'][$param['sid']]['player_info']['from']}","userId":{if condition="isset($user.user_id)"}{$user.user_id}{else/}0{/if},"loginUrl":"{:url('user/login')}","needLoginHint":"{:lang('chatroom/login_required')}"}</script>
                             <script type="application/json" id="vod-play-progress-config">{"enabled":true,"apiBase":"{:rtrim($maccms.path,'/').'/api.php'}","vodId":{$obj.vod_id},"sid":{$param.sid},"nid":{$param.nid},"userId":{if condition="isset($user.user_id)"}{$user.user_id}{else/}0{/if}}</script>
-                            <script type="application/json" id="vod-play-failover-config">{"enabled":true,"apiBase":"{:rtrim($maccms.path,'/').'/api.php'}","vodId":{$obj.vod_id},"sid":{$param.sid},"nid":{$param.nid},"canplayTimeoutMs":15000,"playFrom":"{$obj['vod_play_list'][$param['sid']]['player_info']['from']}"}</script>
                             <div class="mac-play-chat-panel" id="macPlayChatPanel">
                                     <div class="mac-play-chat-panel__head">
                                         <span class="mac-play-chat-panel__title mac-play-chat-panel__title--pc" data-lang="string_play_chat_title">本片讨论</span>
@@ -450,7 +464,9 @@
         {if condition="($obj.vod_copyright neq 1 || $GLOBALS['config']['app']['copyright_status'] neq 1) && !$obj.vod_lock && $popedom.code elt 1 && ($obj['vod_play_list'][$param['sid']]['player_info']['from'] eq 'dplayer' || $obj['vod_play_list'][$param['sid']]['player_info']['from'] eq 'videojs')"}
         <script defer src="{$maccms.path_tpl}/asset/js/vod-play-social.js?v=202604261830"></script>
         <script defer src="{$maccms.path_tpl}/asset/js/vod-play-progress.js?v=202606246"></script>
-        <script defer src="{$maccms.path_tpl}/asset/js/vod-play-failover.js?v=202606262"></script>
+        {/if}
+        {if condition="($obj.vod_copyright neq 1 || $GLOBALS['config']['app']['copyright_status'] neq 1) && !$obj.vod_lock && $popedom.code elt 1"}
+        <script defer src="{$maccms.path_tpl}/asset/js/vod-play-failover.js?v=202607183"></script>
         {/if}
         <script type="text/javascript" src="{$maccms.path}template/default/asset/js/mac-home-card-render.js?v=202604161"></script>
         <script type="text/javascript" src="{$maccms.path}template/default/asset/js/mac-vod-related-scroller.js?v=202607102"></script>
