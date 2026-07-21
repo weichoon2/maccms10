@@ -75,6 +75,12 @@ class AiChatService
             function () { return $this->allowLlmCall(); },
             function ($ok) { AiChatRateLimit::recordLlmCall($ok, $this->aiCfg()); }
         );
+        // embedding 语义重排（AiChatService 与 AiSearch 两处均经 AiEmbeddingService）也纳入
+        // 同一每请求上限 + 熔断器，避免公开搜索路径上无防护的 embedding 成本放大。
+        AiEmbeddingService::setLlmGate(
+            function () { return $this->allowLlmCall(); },
+            function ($ok) { AiChatRateLimit::recordLlmCall($ok, $this->aiCfg()); }
+        );
         $responseLang = $this->resolveResponseLanguage($question);
         $moduleMap = [1=>'vod',2=>'art',3=>'topic',8=>'actor',9=>'role',11=>'website',12=>'plot',13=>'manga'];
         $module = ($mid === 0) ? 'mixed' : (isset($moduleMap[$mid]) ? $moduleMap[$mid] : 'mixed');
@@ -114,6 +120,7 @@ class AiChatService
             'cms_hit' => !empty($cards),
             'cms_count' => count($cards),
             'cards' => $cards,
+            'internal_results' => $this->buildInternalResults($searchMeta, $cards),
             'content' => $this->buildContent($question, $cards, $searchMeta, $aiSearchResults, $externalFederated, $responseLang),
             'enriched_answer' => $this->buildAiChatEnrichedAnswer($question, $cards, $module, $searchMeta, $responseLang),
             'related_links' => $this->buildRelatedLinks($cards, $searchMeta, $aiSearchResults, $externalFederated, $responseLang, $catalogLinks),
@@ -132,6 +139,7 @@ class AiChatService
             'cms_hit' => false,
             'cms_count' => 0,
             'cards' => [],
+            'internal_results' => [],
             'content' => '',
             'enriched_answer' => '',
             'related_links' => [],
@@ -141,6 +149,63 @@ class AiChatService
             'suggestions' => [],
             'trace_id' => '',
         ];
+    }
+
+    /**
+     * 站内匹配（来自 searchMeta['internal_resources']），与主卡片去重后返回。
+     */
+    private function buildInternalResults(array $searchMeta, array $cards)
+    {
+        $items = (isset($searchMeta['internal_resources']) && is_array($searchMeta['internal_resources']))
+            ? $searchMeta['internal_resources'] : [];
+        if (empty($items)) {
+            return [];
+        }
+        $cardTitles = [];
+        $cardUrls = [];
+        foreach ($cards as $card) {
+            $n = isset($card['name']) ? strtolower(trim((string)$card['name'])) : '';
+            if ($n !== '') {
+                $cardTitles[$n] = 1;
+            }
+            $u = isset($card['url']) ? strtolower(trim((string)$card['url'])) : '';
+            if ($u !== '') {
+                $cardUrls[$u] = 1;
+            }
+        }
+        $out = [];
+        $seen = [];
+        foreach ($items as $item) {
+            if (!is_array($item)) {
+                continue;
+            }
+            $title = isset($item['title']) ? trim((string)$item['title']) : '';
+            $url = isset($item['url']) ? trim((string)$item['url']) : '';
+            if ($title === '' || $url === '') {
+                continue;
+            }
+            $tl = strtolower($title);
+            $ul = strtolower($url);
+            if (isset($cardTitles[$tl]) || isset($cardUrls[$ul])) {
+                continue; // 已作为主卡片展示，避免重复
+            }
+            $dk = 't:' . $tl . '|u:' . $ul;
+            if (isset($seen[$dk])) {
+                continue;
+            }
+            $seen[$dk] = 1;
+            $out[] = [
+                'name' => $title,
+                'url' => $url,
+                'img' => mac_url_img(isset($item['pic']) ? (string)$item['pic'] : ''),
+                'actor' => '',
+                'type' => isset($item['type']) ? (string)$item['type'] : '',
+            ];
+            if (count($out) >= 12) {
+                break;
+            }
+        }
+        return $out;
     }
 
     private function buildCards($question, $mid, $limit, array $searchMeta)
@@ -352,113 +417,33 @@ class AiChatService
         return array_slice($out, 0, $fetchLimit);
     }
 
+    /**
+     * 语义 embedding 重排：复用公共 AiEmbeddingService（带缓存 + 超时），
+     * 基础分沿用现有 score、同分按 hits 降序、混合分写回 score 供后续 usort 使用。
+     */
     private function applySemanticEmbeddingRerank($question, array $rows, $mid)
     {
         $cfg = config('maccms.ai_search');
         if (!is_array($cfg) || empty($rows)) {
             return $rows;
         }
-        if ((string)(isset($cfg['semantic_enabled']) ? $cfg['semantic_enabled'] : '0') !== '1') {
-            return $rows;
-        }
-        $candidateLimit = max(3, intval(isset($cfg['semantic_candidates']) ? $cfg['semantic_candidates'] : 40));
-        $weight = floatval(isset($cfg['semantic_weight']) ? $cfg['semantic_weight'] : 0.45);
-        if ($weight < 0) {
-            $weight = 0.0;
-        }
-        if ($weight > 1) {
-            $weight = 1.0;
-        }
-        $rows = array_slice($rows, 0, $candidateLimit);
-        $inputs = [(string)$question];
-        foreach ($rows as $row) {
-            $inputs[] = $this->buildAiEmbedSnippet($mid, $row);
-        }
-        $vectors = $this->requestOpenAiEmbeddings($inputs, $cfg);
-        if (!is_array($vectors) || count($vectors) !== count($inputs)) {
-            return $rows;
-        }
-        $qv = $vectors[0];
-        foreach ($rows as $idx => $row) {
-            $sim = $this->vecCosineSimilarity($qv, $vectors[$idx + 1]);
-            $base = floatval($row['score']);
-            $rows[$idx]['score'] = ($base * (1.0 - $weight)) + ($sim * $weight * 3.0);
-        }
-        usort($rows, function ($a, $b) {
-            if ($a['score'] === $b['score']) {
-                return intval($b['hits']) <=> intval($a['hits']);
-            }
-            return ($b['score'] > $a['score']) ? 1 : -1;
-        });
-        return $rows;
-    }
-
-    private function requestOpenAiEmbeddings(array $inputs, array $cfg)
-    {
-        $provider = strtolower(trim((string)(isset($cfg['provider']) ? $cfg['provider'] : '')));
-        $apiKey = trim((string)(isset($cfg['api_key']) ? $cfg['api_key'] : ''));
-        if ($provider !== 'openai' || $apiKey === '') {
-            return null;
-        }
-        $apiBase = rtrim((string)(isset($cfg['api_base']) ? $cfg['api_base'] : ''), '/');
-        if ($apiBase === '') {
-            $apiBase = 'https://api.openai.com/v1';
-        }
-        $model = trim((string)(isset($cfg['embedding_model']) ? $cfg['embedding_model'] : 'text-embedding-3-small'));
-        if ($model === '') {
-            $model = 'text-embedding-3-small';
-        }
-        $timeout = max(3, intval(isset($cfg['timeout']) ? $cfg['timeout'] : 12));
-        $post = ['model' => $model, 'input' => $inputs];
-        $headers = ['Content-Type: application/json', 'Authorization: Bearer '.$apiKey];
-        $respBody = $this->guardedLlmCall(function () use ($apiBase, $post, $headers, $timeout) {
-            return HttpClient::curlPostWithTimeout(
-                $apiBase.'/embeddings',
-                json_encode($post, JSON_UNESCAPED_UNICODE),
-                $headers,
-                $timeout
-            );
-        }, 'embedding');
-        if ($respBody === false || $respBody === '') {
-            return null;
-        }
-        $json = json_decode((string)$respBody, true);
-        if (!is_array($json) || empty($json['data']) || !is_array($json['data'])) {
-            return null;
-        }
-        usort($json['data'], function ($a, $b) {
-            return intval(isset($a['index']) ? $a['index'] : 0) <=> intval(isset($b['index']) ? $b['index'] : 0);
-        });
-        $vectors = [];
-        foreach ($json['data'] as $item) {
-            if (empty($item['embedding']) || !is_array($item['embedding'])) {
-                return null;
-            }
-            $vectors[] = $item['embedding'];
-        }
-        return $vectors;
-    }
-
-    private function vecCosineSimilarity(array $a, array $b)
-    {
-        $n = min(count($a), count($b));
-        if ($n < 1) {
-            return 0.0;
-        }
-        $dot = 0.0;
-        $na = 0.0;
-        $nb = 0.0;
-        for ($i = 0; $i < $n; $i++) {
-            $va = floatval($a[$i]);
-            $vb = floatval($b[$i]);
-            $dot += $va * $vb;
-            $na += $va * $va;
-            $nb += $vb * $vb;
-        }
-        if ($na <= 0.0 || $nb <= 0.0) {
-            return 0.0;
-        }
-        return $dot / (sqrt($na) * sqrt($nb));
+        return AiEmbeddingService::rerank(
+            $question,
+            $rows,
+            $cfg,
+            function (array $row) use ($mid) {
+                return $this->buildAiEmbedSnippet($mid, $row);
+            },
+            [
+                'base' => function (array $row) {
+                    return floatval(isset($row['score']) ? $row['score'] : 0);
+                },
+                'tie' => function (array $a, array $b) {
+                    return intval(isset($b['hits']) ? $b['hits'] : 0) <=> intval(isset($a['hits']) ? $a['hits'] : 0);
+                },
+                'scoreKey' => 'score',
+            ]
+        );
     }
 
     private function buildAiEmbedSnippet($mid, array $row)

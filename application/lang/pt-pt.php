@@ -819,6 +819,7 @@ https://www.baidu.com/123.jpg
   'index/ai_chat_loading'=>'A IA está a pesquisar...',
   'index/ai_chat_done'=>'Pesquisa concluída',
   'index/ai_chat_match_results'=>'Resultados correspondentes ({n})',
+  'index/ai_chat_onsite_matches'=>'Mais correspondências no site',
   'index/ai_chat_related_links'=>'Ligações relacionadas',
   'index/ai_chat_site_links'=>'No site',
   'index/ai_chat_external_links'=>'Externo',

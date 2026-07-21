@@ -885,6 +885,7 @@ https://www.baidu.com/123.jpg
     'index/ai_chat_loading'=>'AI正在搜索中...',
     'index/ai_chat_done'=>'检索完成',
     'index/ai_chat_match_results'=>'匹配结果（{n} 条）',
+    'index/ai_chat_onsite_matches'=>'更多站内匹配',
     'index/ai_chat_related_links'=>'相关链接',
     'index/ai_chat_site_links'=>'本站',
     'index/ai_chat_external_links'=>'站外',

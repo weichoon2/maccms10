@@ -6,7 +6,8 @@ use think\Log;
 
 class AiSearch
 {
-    private const DEFAULT_INTERNAL_RESULT_LIMIT = 8;
+    // 注：不写 private —— 类常量可见性是 PHP 7.1+ 语法，本项目须兼容 PHP 7.0
+    const DEFAULT_INTERNAL_RESULT_LIMIT = 8;
 
     /**
      * Meili 内联资源：表名、主键、展示字段、详情 URL；与 Meilisearch 文档 id 前缀一致。
@@ -201,6 +202,7 @@ class AiSearch
         $expansion = self::expandTerms($cfg, $module, $wd);
         $queryMerged = self::mergeQuery($wd, $expansion);
         $internal = self::buildInternalResources($wd, $module, $queryMerged);
+        $internal = self::applySemanticRerank($cfg, $wd, $internal);
         $external = self::buildExternalResources($cfg, $wd);
 
         $out = [
@@ -298,6 +300,31 @@ class AiSearch
         }
         $all = array_unique(array_filter(array_merge([$wd], $expansion)));
         return implode(' ', $all);
+    }
+
+    /**
+     * 语义重排内联资源（semantic_* 生效点）：以条目 title 作为 embedding 文本，
+     * 复用与 AiChatService 同一套 AiEmbeddingService（含缓存 + 超时）。
+     * 未开启 semantic_enabled 或无资源时零成本原样返回。
+     *
+     * @param array  $cfg      经 getConfig 归一后的 ai_search 配置
+     * @param string $wd       原始查询词
+     * @param array  $internal buildInternalResources 结果（title/url/pic/type）
+     * @return array
+     */
+    private static function applySemanticRerank(array $cfg, $wd, array $internal)
+    {
+        if (empty($internal) || !AiEmbeddingService::semanticEnabled($cfg)) {
+            return $internal;
+        }
+        return AiEmbeddingService::rerank(
+            $wd,
+            $internal,
+            $cfg,
+            function (array $item) {
+                return isset($item['title']) ? (string)$item['title'] : '';
+            }
+        );
     }
 
     private static function expandTerms($cfg, $module, $wd)

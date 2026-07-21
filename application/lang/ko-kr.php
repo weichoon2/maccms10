@@ -819,6 +819,7 @@ https://www.baidu.com/123.jpg
   'index/ai_chat_loading'=>'AI가 검색 중입니다...',
   'index/ai_chat_done'=>'검색 완료',
   'index/ai_chat_match_results'=>'일치 결과 ({n}건)',
+  'index/ai_chat_onsite_matches'=>'사이트 내 추가 일치',
   'index/ai_chat_related_links'=>'관련 링크',
   'index/ai_chat_site_links'=>'사이트 내',
   'index/ai_chat_external_links'=>'외부',

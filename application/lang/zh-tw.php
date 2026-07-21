@@ -820,6 +820,7 @@ https://www.baidu.com/123.jpg
   'index/ai_chat_loading'=>'AI正在搜尋中...',
   'index/ai_chat_done'=>'檢索完成',
   'index/ai_chat_match_results'=>'匹配結果（{n} 條）',
+  'index/ai_chat_onsite_matches'=>'更多站內匹配',
   'index/ai_chat_related_links'=>'相關連結',
   'index/ai_chat_site_links'=>'本站',
   'index/ai_chat_external_links'=>'站外',
