@@ -20,7 +20,7 @@ class User extends Base
         //判断用户登录状态
         $ac = request()->action();
         $guestAllowedActions = ['login', 'logout', 'ajax_login', 'reg', 'findpass', 'findpass_msg', 'findpass_reset', 'reg_msg', 'oauth', 'logincallback', 'visit', 'index', 'ajax_upgrade'];
-        $guestAllowedGetActions = ['buy', 'plays', 'upgrade', 'checkin'];
+        $guestAllowedGetActions = ['buy', 'plays', 'upgrade', 'checkin', 'ajax_mall_goods', 'ajax_mall_orders'];
         if (in_array($ac, $guestAllowedActions) || (in_array($ac, $guestAllowedGetActions) && !Request()->isPost())) {
             // 游客可访问的页面也注入 obj，避免模板判断分支缺少变量
             $this->assign('obj', $GLOBALS['user']);
@@ -918,6 +918,87 @@ class User extends Base
         $this->assign('param', $param);
         $this->assign('list', $res['list']);
         return $this->fetch('user/mall_orders');
+    }
+
+    public function ajax_mall_goods()
+    {
+        if ($GLOBALS['user']['user_id'] < 1) {
+            return json(['code' => 1001, 'msg' => lang('index/no_login'), 'list' => []]);
+        }
+        $param = input();
+        $param['page'] = intval($param['page']) < 1 ? 1 : intval($param['page']);
+        $param['limit'] = intval($param['limit']) < 20 ? 20 : intval($param['limit']);
+
+        $where = [];
+        $where['mall_goods_status'] = 1;
+        if (in_array($param['type'], ['vip', 'card', 'download_quota'], true)) {
+            $where['mall_goods_type'] = ['eq', $param['type']];
+        }
+        $order = 'mall_goods_sort asc,mall_goods_id desc';
+        $res = model('MallGoods')->listData($where, $order, $param['page'], $param['limit']);
+
+        $list = [];
+        foreach ($res['list'] as $row) {
+            $ext = $row['mall_goods_ext_arr'] ?? [];
+            $item = [
+                'mall_goods_id' => intval($row['mall_goods_id']),
+                'mall_goods_name' => $row['mall_goods_name'],
+                'mall_goods_type' => $row['mall_goods_type'],
+                'mall_goods_points' => intval($row['mall_goods_points']),
+                'mall_goods_stock' => intval($row['mall_goods_stock']),
+                'mall_goods_status' => intval($row['mall_goods_status']),
+                'mall_goods_sort' => intval($row['mall_goods_sort']),
+            ];
+            if ($row['mall_goods_type'] === 'vip') {
+                $item['days'] = intval($ext['days'] ?? 0);
+            } elseif ($row['mall_goods_type'] === 'download_quota') {
+                $item['quota'] = intval($ext['quota'] ?? 0);
+            } elseif ($row['mall_goods_type'] === 'card') {
+                $item['card_money'] = intval($ext['card_money'] ?? 0);
+                $item['card_points'] = intval($ext['card_points'] ?? 0);
+            }
+            $list[] = $item;
+        }
+        $res['list'] = $list;
+        return json($res);
+    }
+
+    public function ajax_mall_orders()
+    {
+        if ($GLOBALS['user']['user_id'] < 1) {
+            return json(['code' => 1001, 'msg' => lang('index/no_login'), 'list' => []]);
+        }
+        $param = input();
+        $param['page'] = intval($param['page']) < 1 ? 1 : intval($param['page']);
+        $param['limit'] = intval($param['limit']) < 20 ? 20 : intval($param['limit']);
+
+        $where = [];
+        $where['mo.user_id'] = $GLOBALS['user']['user_id'];
+        $order = 'mo.mall_order_id desc';
+        $res = model('MallOrder')->listData($where, $order, $param['page'], $param['limit']);
+
+        $list = [];
+        foreach ($res['list'] as $row) {
+            $snapshot = $row['mall_order_snapshot_arr'] ?? [];
+            if (isset($snapshot['ext']) && is_array($snapshot['ext'])) {
+                unset($snapshot['ext']['card_mode'], $snapshot['ext']['role_no'], $snapshot['ext']['role_pwd']);
+            }
+            $list[] = [
+                'mall_order_id' => intval($row['mall_order_id']),
+                'mall_goods_name' => $row['mall_goods_name'],
+                'mall_goods_type' => $row['mall_goods_type'],
+                'mall_order_points' => intval($row['mall_order_points']),
+                'mall_order_quantity' => intval($row['mall_order_quantity']),
+                'mall_order_status' => intval($row['mall_order_status']),
+                'mall_order_time' => intval($row['mall_order_time']),
+                'mall_order_complete_time' => intval($row['mall_order_complete_time']),
+                'mall_order_remarks' => $row['mall_order_remarks'],
+                'mall_order_delivery_arr' => $row['mall_order_delivery_arr'] ?? [],
+                'mall_order_snapshot_arr' => $snapshot,
+            ];
+        }
+        $res['list'] = $list;
+        return json($res);
     }
 
     public function ajax_mall_exchange()
