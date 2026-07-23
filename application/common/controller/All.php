@@ -963,9 +963,7 @@ polyfill;
                         $where['ulog_sid'] = 0;
                         $where['ulog_nid'] = 0;
                     }
-                    $res = model('Ulog')->infoData($where);
-
-                    if ($res['code'] > 1) {
+                    if (!model('Ulog')->hasBought($where)) {
                         return ['code' => 4003, 'msg' => lang('controller/pay_down_points', [$points]), 'points' => $points, 'confirm' => 1, 'trysee' => 0];
                     }
                 }

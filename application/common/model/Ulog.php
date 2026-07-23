@@ -291,6 +291,20 @@ class Ulog extends Base {
         return ['code'=>1,'msg'=>lang('obtain_ok'),'info'=>$info];
     }
 
+    /**
+     * 判断用户是否已拥有某项权限（已购买）。
+     * 与 infoData 的区别：不把 ulog_points（价格）/ ulog_time 当匹配键，
+     * 使「金币购买(记原价)」与「额度兑换(记0)」都能命中同一权限记录。
+     */
+    public function hasBought($where)
+    {
+        if (empty($where) || !is_array($where)) {
+            return false;
+        }
+        unset($where['ulog_points'], $where['ulog_time']);
+        return $this->where($where)->count() > 0;
+    }
+
     public function saveData($data)
     {
         $data['user_id'] = intval(cookie('user_id'));

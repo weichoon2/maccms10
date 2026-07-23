@@ -420,9 +420,13 @@ class Payment extends Base
         }
         $data['ulog_points'] = intval($res['info'][$col]);
 
-        // 检查是否已购买
-        $exists = model('Ulog')->infoData($data);
-        if ($exists['code'] == 1) {
+        // 检查是否已购买：视频下载(mid=1,type=5)走 hasBought，兼容额度兑换记 ulog_points=0；
+        // 其余类型保持原精确匹配，避免播放进度记录(type=4,points=0)被误判为已购。
+        $isDownload = (intval($param['mid']) == 1 && intval($param['type']) == 5);
+        $owned = $isDownload
+            ? model('Ulog')->hasBought($data)
+            : (model('Ulog')->infoData($data)['code'] == 1);
+        if ($owned) {
             return json(['code' => 1, 'msg' => lang('api/payment/already_owned')]);
         }
 

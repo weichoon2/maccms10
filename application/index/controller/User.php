@@ -156,8 +156,13 @@ class User extends Base
             $data['ulog_points'] = intval($res['info'][$col]);
         }
 
-        $res = model('Ulog')->infoData($data);
-        if ($res['code'] == 1) {
+        // 视频下载(mid=1,type=5)已拥有判断走 hasBought：额度兑换记 ulog_points=0，
+        // 与金币购买(记原价)都应算已购，避免二次扣额度；其余类型保持原精确匹配。
+        $isDownload = ($param['mid'] == '1' && $param['type'] == '5');
+        $owned = $isDownload
+            ? model('Ulog')->hasBought($data)
+            : (model('Ulog')->infoData($data)['code'] == 1);
+        if ($owned) {
             return json(['code' => 1, 'msg' => lang('index/buy_popedom1')]);
         }
 

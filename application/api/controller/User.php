@@ -588,13 +588,28 @@ class User extends Base
         if ($data['ulog_mid'] < 1 || $data['ulog_rid'] < 1 || $data['ulog_type'] < 1) {
             return json(['code' => 1001, 'msg' => lang('param_err')]);
         }
+        $data['ulog_points'] = 0;
+        // 视频播放/下载：按真实定价核算，禁止伪造 0 分购买记录
+        if ($data['ulog_mid'] == 1 && $data['ulog_type'] > 3) {
+            $where2 = [];
+            $where2['vod_id'] = $data['ulog_rid'];
+            $res = model('Vod')->infoData($where2);
+            if ($res['code'] > 1) {
+                return json($res);
+            }
+            $flag = $data['ulog_type'] == 4 ? 'play' : 'down';
+            $data['ulog_points'] = $res['info']['vod_points_' . $flag];
+        }
+        $data['ulog_points'] = intval($data['ulog_points']);
         // 已存在则更新时间
         $existing = model('Ulog')->infoData($data);
         if ($existing['code'] == 1) {
             model('Ulog')->where($data)->update(['ulog_time' => time()]);
             return json(['code' => 1, 'msg' => lang('update_ok')]);
         }
-        $data['ulog_points'] = 0;
+        if ($data['ulog_points'] > 0) {
+            return json(['code' => 2001, 'msg' => lang('index/ulog_fee')]);
+        }
         $res = model('Ulog')->saveData($data);
         return json($res);
     }
