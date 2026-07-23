@@ -235,6 +235,22 @@ if(empty($col_list[$pre.'seckill_user'])){
             'hours'   => '00,01,02,03,04,05,06,07,08,09,10,11,12,13,14,15,16,17,18,19,20,21,22,23',
             'runtime' => 0,
         ],
+        // PWA Web Push：广播队列派发任务（feat-pwa）。存量站点升级不覆盖 extra/timming.php，
+        // 必须在此注入，否则 push_queue 入队后无任务派发，公告永远卡在 status=0 收不到。
+        // 字段与 extra/timming.php 权威版一致：file=pushbroadcast 对应 api/controller/Timming::pushbroadcast()。
+        'push_broadcast' => [
+            'id'       => 'push_broadcast',
+            'status'   => '1',
+            'name'     => 'push_broadcast',
+            'des'      => 'Web Push广播队列派发',
+            'file'     => 'pushbroadcast',
+            'param'    => 'batch=100&max=500',
+            'weeks'    => '1,2,3,4,5,6,0',
+            'hours'    => '00,01,02,03,04,05,06,07,08,09,10,11,12,13,14,15,16,17,18,19,20,21,22,23',
+            'interval' => 60,
+            'runtime'  => 0,
+
+        ],
     ];
     $_timming_changed = false;
     foreach ($_timming_defaults as $_k => $_task) {
@@ -251,6 +267,23 @@ if(empty($col_list[$pre.'seckill_user'])){
         }
     }
     unset($_timming_file, $_timming, $_timming_defaults, $_timming_changed, $_k, $_task);
+}
+// PWA Web Push：推送订阅表（feat-pwa）
+if(empty($col_list[$pre.'push_subscription'])){
+    $sql .= "CREATE TABLE `{$pre}push_subscription` ( `subscription_id` int(10) unsigned NOT NULL AUTO_INCREMENT, `user_id` int(10) unsigned NOT NULL DEFAULT '0', `endpoint` varchar(512) NOT NULL DEFAULT '', `p256dh` varchar(255) NOT NULL DEFAULT '', `auth` varchar(255) NOT NULL DEFAULT '', `user_agent` varchar(255) NOT NULL DEFAULT '', `create_time` int(10) unsigned NOT NULL DEFAULT '0', `update_time` int(10) unsigned NOT NULL DEFAULT '0', PRIMARY KEY (`subscription_id`), UNIQUE KEY `user_endpoint` (`user_id`,`endpoint`(191)), KEY `user_id` (`user_id`) ) ENGINE=InnoDB DEFAULT CHARSET=utf8;";
+    $sql .="\r";
+} else {
+    $sql .= "ALTER TABLE `{$pre}push_subscription` ENGINE=InnoDB;";
+    $sql .="\r";
+}
+// PWA Web Push：广播推送队列表（feat-pwa）。PushDispatcher::enqueueBroadcast/runQueue 依赖此表，
+// 存量站点升级时必须补建，否则人工广播勾选“同时推送”会因表缺失而失败。
+if(empty($col_list[$pre.'push_queue'])){
+    $sql .= "CREATE TABLE `{$pre}push_queue` ( `queue_id` int(10) unsigned NOT NULL AUTO_INCREMENT, `title` varchar(255) NOT NULL DEFAULT '', `body` varchar(255) NOT NULL DEFAULT '', `url` varchar(512) NOT NULL DEFAULT '', `icon` varchar(255) NOT NULL DEFAULT '', `sent` int(10) unsigned NOT NULL DEFAULT '0', `failed` int(10) unsigned NOT NULL DEFAULT '0', `last_id` int(10) unsigned NOT NULL DEFAULT '0', `status` tinyint(1) NOT NULL DEFAULT '0', `create_time` int(10) unsigned NOT NULL DEFAULT '0', `update_time` int(10) unsigned NOT NULL DEFAULT '0', PRIMARY KEY (`queue_id`), KEY `status` (`status`) ) ENGINE=InnoDB DEFAULT CHARSET=utf8;";
+    $sql .="\r";
+} else {
+    $sql .= "ALTER TABLE `{$pre}push_queue` ENGINE=InnoDB;";
+    $sql .="\r";
 }
 if(!empty($col_list[$pre.'user']) && empty($col_list[$pre.'user']['user_down_quota'])){
     $sql .= "ALTER TABLE `{$pre}user` ADD `user_down_quota` int(10) unsigned NOT NULL DEFAULT '0' COMMENT '下载额度' AFTER `user_points_froze`;";
@@ -1113,6 +1146,24 @@ if (!empty($col_list[$pre . 'vod'])) {
             if (!isset($config['trusted_proxies'])) {
                 $config['trusted_proxies'] = '';
                 $changed = true;
+            }
+            // PWA Web Push 配置注入（幂等）：enable / vapid_public / vapid_private /
+            // vapid_subject。密钥留空由站长在“推送设置”页一键生成，不自动填充。
+            if (!isset($config['push']) || !is_array($config['push'])) {
+                $config['push'] = [];
+                $changed = true;
+            }
+            $pushFill = [
+                'enable'        => '0',
+                'vapid_public'  => '',
+                'vapid_private' => '',
+                'vapid_subject' => '',
+            ];
+            foreach ($pushFill as $k => $v) {
+                if (!isset($config['push'][$k])) {
+                    $config['push'][$k] = $v;
+                    $changed = true;
+                }
             }
             if ($changed) {
                 mac_arr2file($file, $config);

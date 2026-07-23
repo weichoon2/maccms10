@@ -31,8 +31,11 @@
                                 <option value="cj" {if condition="$info['file'] eq 'cj'"}selected{/if}>{:lang('admin/timming/cj')}</option>
                                 <option value="cache" {if condition="$info['file'] eq 'cache'"}selected{/if}>{:lang('admin/timming/cache')}</option>
                                 <option value="urlsend" {if condition="$info['file'] eq 'urlsend'"}selected{/if}>{:lang('admin/timming/urlsend')}</option>
-                                <option value="extsync" {if condition="$info['file'] eq 'extsync'"}selected{/if}>External Sync</option>
+                                <option value="extsync" {if condition="$info['file'] eq 'extsync'"}selected{/if}>{:lang('admin/timming/extsync')}</option>
                                 <option value="vodpublish" {if condition="$info['file'] eq 'vodpublish'"}selected{/if}>{:lang('admin/timming/vodpublish')}</option>
+                                <option value="analytics" {if condition="$info['file'] eq 'analytics'"}selected{/if}>{:lang('admin/timming/analytics')}</option>
+                                <option value="notify" {if condition="$info['file'] eq 'notify'"}selected{/if}>{:lang('admin/timming/notify')}</option>
+                                <option value="pushbroadcast" {if condition="$info['file'] eq 'pushbroadcast'"}selected{/if}>{:lang('admin/timming/pushbroadcast')}</option>
                             </select>
                         </div>
                     </div>
@@ -41,6 +44,13 @@
                         <div class="layui-input-block">
                             <input type="text" class="layui-input" value="{$info.param}" placeholder="{:lang('admin/timming/attach_param_tip')}" id="param" name="param">
                         </div>
+                    </div>
+                    <div class="layui-form-item">
+                        <label class="layui-form-label">{:lang('admin/timming/exec_interval_sec')}：</label>
+                        <div class="layui-input-inline w500">
+                            <input type="number" min="0" step="1" class="layui-input" value="{$info.interval|default='0'}" placeholder="0" id="interval" name="interval">
+                        </div>
+                        <div class="layui-form-mid layui-word-aux">{:lang('admin/timming/exec_interval_tip')}</div>
                     </div>
 
                     <div class="layui-form-item">

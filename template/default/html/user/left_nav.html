@@ -17,6 +17,11 @@
 					<i class="iconfont yonghu">&#xe62b;</i><span data-lang="user_my_info">我的资料</span>
 				</a>
 			</li>
+			<li data-index='1'>
+				<a href="{:rtrim($maccms.path,'/').'/index.php/user/notify.html'}">
+					<i class="iconfont lishi">&#xe624;</i><span data-lang="notify_title">消息中心</span>
+				</a>
+			</li>
 			<li data-index='2'>
 				<a href="{:url('user/favs')}">
 					<i class="iconfont lishi">&#xe629;</i><span data-lang="user_my_collection">我的收藏</span>
@@ -85,6 +90,13 @@
 				<a href="{:url('user/info')}">
 					<img class="userli-img" src="{$maccms.path}template/default/images/member/user-li1.png" alt="">
 					<span data-lang="user_my_info">我的资料</span>
+					<i class="iconfont ico-right">&#xe623;</i>
+				</a>
+			</li>
+			<li>
+				<a href="{:rtrim($maccms.path,'/').'/index.php/user/notify.html'}">
+					<img class="userli-img" src="{$maccms.path}template/default/images/member/user-li3.png" alt="">
+					<span data-lang="notify_title">消息中心</span>
 					<i class="iconfont ico-right">&#xe623;</i>
 				</a>
 			</li>

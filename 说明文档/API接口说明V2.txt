@@ -959,3 +959,52 @@ API 接口说明 V2（基于当前实现）
     - 仅返回 live_status=1 的频道；不存在或已禁用返回 code=1002
     - 请求时自动增加点击量（live_hits、live_hits_day、live_hits_week、live_hits_month 各+1，并更新 live_time_hits）
     - live_url_list 格式与列表接口一致
+
+九、PWA 推送（Web Push）接口
+
+27) User — Web Push 订阅
+  说明：
+  - 用于 PWA「新剧提醒」。浏览器通过 Service Worker + PushManager 订阅，本组接口负责下发公钥、保存/取消订阅。
+  - 需后台「系统 → 推送设置（configpush）」开启开关并生成 VAPID 密钥后才生效；未开启时订阅接口返回 code=1003。
+  - 前端引导脚本：模板 asset/js/push-subscribe.js（页面经 path_tpl 引入；暴露 window.MacPushSubscribe.subscribe/unsubscribe/isSubscribed 等）。
+  - Service Worker / Manifest：动态路由 pwa/sw、pwa/manifest（由 Pwa 控制器输出；非站点根目录静态 service-worker.js / manifest.json）。
+  - 运行前提：Web Push 需 HTTPS（localhost 除外）与用户授予通知权限；iOS 需先「添加到主屏幕」。
+  - 订阅数据表：mac_push_subscription（按 user_id + endpoint 唯一）。
+
+- 获取推送公钥与开关状态：GET /api.php/user/push_vapid
+  - 登录要求：否（游客可读，用于订阅前判断是否显示入口）
+  - 参数：无
+  - 返回：
+    - code=1：{code:1, msg:'获取成功', info:{ enabled:0|1, vapid_public:string }}
+      - enabled=1 表示后台已开启且已配置公钥；此时 vapid_public 为 base64url 编码的 VAPID 公钥（65B 未压缩点）
+      - enabled=0 时 vapid_public 返回空字符串
+  - 典型用途：前端订阅前调用；enabled=0 则隐藏「开启新剧提醒」入口
+
+- 保存推送订阅：POST /api.php/user/push_subscribe
+  - 登录要求：是（未登录返回 code=1401）
+  - 参数（application/x-www-form-urlencoded）：
+    - endpoint：string 必填，推送服务端点 URL（<=512 字）
+    - keys[p256dh]：string 必填，用户代理公钥（base64url）。也兼容平铺参数 p256dh
+    - keys[auth]：string 必填，认证密钥（base64url）。也兼容平铺参数 auth
+    - user_agent：无需传递，服务端自动读取请求头 User-Agent 存储
+  - 行为：按 user_id + endpoint 幂等 upsert（存在则更新 p256dh/auth/user_agent，否则新增）
+  - 返回：
+    - code=1：{code:1, msg:'保存成功'}
+    - code=1003：站点未开启推送功能（push.enable=0）
+    - code=1401：未登录
+    - code=1001：参数校验失败（endpoint/p256dh/auth 为空或 endpoint 超长）
+
+- 取消推送订阅：POST /api.php/user/push_unsubscribe
+  - 登录要求：是（未登录返回 code=1401）
+  - 参数：
+    - endpoint：string 必填，需取消的订阅端点 URL
+  - 行为：删除当前用户名下该 endpoint 的订阅记录（限定 user_id，防止越权删除他人订阅）
+  - 返回：
+    - code=1：{code:1, msg:'删除成功'}
+    - code=1401：未登录
+    - code=1001：endpoint 为空
+
+  补充（后台侧，非前端 API）：
+  - 生成/保存密钥与开关：后台「系统 → 推送设置」= admin.php/system/configpush（op=genkey 生成 VAPID，POST 保存，需登录鉴权 + Token 校验）
+  - 发送时机：后台「通知中心」广播时勾选「同时推送」（also_push），由 app\common\util\PushDispatcher 对订阅执行 RFC 8291/8188 aes128gcm 加密 + VAPID(ES256) 后 POST 到 endpoint；对返回 404/410 的失效订阅自动清理
+

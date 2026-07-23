@@ -18,6 +18,7 @@
                 <th width="80">{:lang('name')}</th>
                 <th width="150">{:lang('description')}</th>
                 <th width="80">{:lang('run')}</th>
+                <th width="90">{:lang('admin/timming/exec_interval')}</th>
                 <th width="80">{:lang('status')}</th>
                 <th width="80">{:lang('last_run_time')}</th>
                 <th width="100">{:lang('opt')}</th>
@@ -29,6 +30,7 @@
                 <td>{$vo.name|htmlspecialchars}</td>
                 <td>{$vo.des|htmlspecialchars}</td>
                 <td>{$vo.file}</td>
+                <td>{if condition="isset($vo['interval']) AND $vo['interval'] gt 0"}{$vo.interval}s{else}—{/if}</td>
                 <td>
                     <input type="checkbox" name="status" {if condition="$vo['status'] eq 1"}checked{/if} value="{$vo['status']}" lay-skin="switch" lay-filter="switchStatus" lay-text="{:lang('open')}|{:lang('close')}" data-href="{:url('field?col=status&ids='.$vo['name'])}">
                 </td>

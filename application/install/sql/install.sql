@@ -672,6 +672,44 @@ CREATE TABLE `mac_notify_read` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
 
 -- ----------------------------
+-- Table structure for mac_push_subscription
+-- ----------------------------
+DROP TABLE IF EXISTS `mac_push_subscription`;
+CREATE TABLE `mac_push_subscription` (
+  `subscription_id` int(10) unsigned NOT NULL AUTO_INCREMENT,
+  `user_id` int(10) unsigned NOT NULL DEFAULT '0',
+  `endpoint` varchar(512) NOT NULL DEFAULT '',
+  `p256dh` varchar(255) NOT NULL DEFAULT '',
+  `auth` varchar(255) NOT NULL DEFAULT '',
+  `user_agent` varchar(255) NOT NULL DEFAULT '',
+  `create_time` int(10) unsigned NOT NULL DEFAULT '0',
+  `update_time` int(10) unsigned NOT NULL DEFAULT '0',
+  PRIMARY KEY (`subscription_id`),
+  UNIQUE KEY `user_endpoint` (`user_id`,`endpoint`(191)),
+  KEY `user_id` (`user_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+
+-- ----------------------------
+-- Table structure for mac_push_queue
+-- ----------------------------
+DROP TABLE IF EXISTS `mac_push_queue`;
+CREATE TABLE `mac_push_queue` (
+  `queue_id` int(10) unsigned NOT NULL AUTO_INCREMENT,
+  `title` varchar(255) NOT NULL DEFAULT '',
+  `body` varchar(255) NOT NULL DEFAULT '',
+  `url` varchar(512) NOT NULL DEFAULT '',
+  `icon` varchar(255) NOT NULL DEFAULT '',
+  `sent` int(10) unsigned NOT NULL DEFAULT '0',
+  `failed` int(10) unsigned NOT NULL DEFAULT '0',
+  `last_id` int(10) unsigned NOT NULL DEFAULT '0',
+  `status` tinyint(1) NOT NULL DEFAULT '0',
+  `create_time` int(10) unsigned NOT NULL DEFAULT '0',
+  `update_time` int(10) unsigned NOT NULL DEFAULT '0',
+  PRIMARY KEY (`queue_id`),
+  KEY `status` (`status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+
+-- ----------------------------
 -- Table structure for mac_order
 -- ----------------------------
 DROP TABLE IF EXISTS `mac_order`;

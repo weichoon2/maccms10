@@ -754,6 +754,14 @@ class User extends Base
         return $this->fetch('user/plays');
     }
 
+    /**
+     * 站内消息中心（列表与 Push 开关由前端 API 拉取）
+     */
+    public function notify()
+    {
+        return $this->fetch('user/notify');
+    }
+
     public function downs()
     {
         $param = input();

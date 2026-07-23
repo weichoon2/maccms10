@@ -284,6 +284,22 @@ class Index extends Controller
             $config_new['monitor']['cron_token'] = mac_get_rndstr(32);
         }
 
+        // PWA Web Push 配置：全新安装写入默认值（缺失才补，与升级脚本 data/update/database.php 保持一致）
+        if (!isset($config_new['push']) || !is_array($config_new['push'])) {
+            $config_new['push'] = [];
+        }
+        $pushFill = [
+            'enable'        => '0',
+            'vapid_public'  => '',
+            'vapid_private' => '',
+            'vapid_subject' => '',
+        ];
+        foreach ($pushFill as $p_k => $p_v) {
+            if (!isset($config_new['push'][$p_k])) {
+                $config_new['push'][$p_k] = $p_v;
+            }
+        }
+
         // 更新程序配置文件
         $res = mac_arr2file(APP_PATH . 'extra/maccms.php', $config_new);
 		if ($res === false) {
@@ -321,6 +337,21 @@ class Index extends Controller
 					'weeks'   => '1,2,3,4,5,6,0',
 					'hours'   => '00,01,02,03,04,05,06,07,08,09,10,11,12,13,14,15,16,17,18,19,20,21,22,23',
 					'runtime' => 0,
+				],
+				// PWA Web Push：广播队列派发任务（feat-pwa）。与 update/database.php 保持一致，
+				// 保证全新安装也具备派发任务，否则 push_queue 入队后无任务派发、公告收不到。
+				'push_broadcast' => [
+					'id'       => 'push_broadcast',
+					'status'   => '1',
+					'name'     => 'push_broadcast',
+					'des'      => 'Web Push广播队列派发',
+					'file'     => 'pushbroadcast',
+					'param'    => 'batch=100&max=500',
+					'weeks'    => '1,2,3,4,5,6,0',
+					'hours'    => '00,01,02,03,04,05,06,07,08,09,10,11,12,13,14,15,16,17,18,19,20,21,22,23',
+					'interval' => 60,
+					'runtime'  => 0,
+
 				],
 			];
 			$_timming_changed = false;

@@ -730,7 +730,54 @@ class System extends Base
         return $this->fetch('admin@system/configsms');
     }
 
+    public function configpush()
+    {
+        // 生成 VAPID 密钥对（AJAX，op=genkey）：仅返回给前端填入表单，由站长确认后再保存落盘
+        if (input('op') === 'genkey') {
+            $keys = \app\common\util\PushDispatcher::generateVapidKeys();
+            if ($keys === false) {
+                return $this->error(lang('admin/system/configpush/genkey_fail'));
+            }
+            return $this->success(lang('admin/system/configpush/genkey_ok'), null, $keys);
+        }
+
+        if (Request()->isPost()) {
+            $config = input('', '', 'htmlentities');
+
+            $validate = \think\Loader::validate('Token');
+            if (!$validate->check($config)) {
+                $err = $validate->getError();
+                $msg = is_scalar($err) ? (string)$err : lang('param_err');
+                return $this->ajaxErrorWithFreshToken($msg);
+            }
+            unset($config['__token__']);
+
+            $push = isset($config['push']) && is_array($config['push']) ? $config['push'] : [];
+            $config_new = [];
+            $config_new['push'] = [
+                'enable'        => isset($push['enable']) && $push['enable'] == 1 ? '1' : '0',
+                'vapid_public'  => isset($push['vapid_public']) ? trim($push['vapid_public']) : '',
+                'vapid_private' => isset($push['vapid_private']) ? trim($push['vapid_private']) : '',
+                'vapid_subject' => isset($push['vapid_subject']) ? trim($push['vapid_subject']) : '',
+            ];
+
+            $config_old = config('maccms');
+            $config_new = array_merge($config_old, $config_new);
+
+            $res = mac_arr2file(APP_PATH . 'extra/maccms.php', $config_new);
+            if ($res === false) {
+                return $this->ajaxErrorWithFreshToken(lang('save_err'));
+            }
+            return $this->success(lang('save_ok'));
+        }
+
+        $this->assign('config', config('maccms'));
+        $this->assign('title', lang('admin/system/configpush/title'));
+        return $this->fetch('admin@system/configpush');
+    }
+
     public function configapi()
+
     {
         if (Request()->isPost()) {
             $config = input('','','htmlentities');

@@ -418,6 +418,105 @@ class User extends Base
     }
 
     /**
+     * 获取 Web Push 公钥与开关状态（前端订阅前调用）
+     * api.php/user/push_vapid (GET)
+     * 返回 enabled 与 vapid_public，供 PushManager.subscribe 使用。
+     */
+    public function push_vapid(Request $request)
+    {
+        $cfg = config('maccms.push');
+        $enabled = (is_array($cfg) && !empty($cfg['enable']) && !empty($cfg['vapid_public'])) ? 1 : 0;
+        return json([
+            'code' => 1,
+            'msg'  => lang('obtain_ok'),
+            'info' => [
+                'enabled'      => $enabled,
+                'vapid_public' => $enabled ? (string)$cfg['vapid_public'] : '',
+            ],
+        ]);
+    }
+
+    /**
+     * 保存 Web Push 订阅（需登录）
+     * api.php/user/push_subscribe (POST)
+     * 参数：endpoint, keys[p256dh], keys[auth]（或平铺 p256dh/auth）
+     */
+    public function push_subscribe(Request $request)
+    {
+        $cfg = config('maccms.push');
+        if (!is_array($cfg) || empty($cfg['enable'])) {
+            return json(['code' => 1003, 'msg' => lang('api/push_disabled')]);
+        }
+        if (!$request->isPost()) {
+            return json(['code' => 1001, 'msg' => lang('param_err')]);
+        }
+        $check = model('User')->checkLogin();
+        if ($check['code'] > 1) return json(['code' => 1401, 'msg' => lang('api/please_login_first')]);
+        $uid = intval($check['info']['user_id']);
+
+        // 与其他写接口一致：登录态写操作需校验 CSRF，防止跨站伪造订阅
+        $csrfErr = $this->checkCsrf();
+        if ($csrfErr !== null) return json($csrfErr);
+
+        // 限流：抑制刷订阅写库（每分钟 20 次）
+        $limited = $this->apiRateLimit('push_subscribe', $uid, 20, 60);
+        if ($limited !== true) {
+            return $limited;
+        }
+
+        $param = $request->param();
+        $endpoint = isset($param['endpoint']) ? trim((string)$param['endpoint']) : '';
+        $p256dh = '';
+        $auth = '';
+        if (isset($param['keys']) && is_array($param['keys'])) {
+            $p256dh = isset($param['keys']['p256dh']) ? trim((string)$param['keys']['p256dh']) : '';
+            $auth   = isset($param['keys']['auth']) ? trim((string)$param['keys']['auth']) : '';
+        }
+        if ($p256dh === '' && isset($param['p256dh'])) $p256dh = trim((string)$param['p256dh']);
+        if ($auth === '' && isset($param['auth'])) $auth = trim((string)$param['auth']);
+
+        $res = model('PushSubscription')->saveSubscription([
+            'user_id'    => $uid,
+            'endpoint'   => $endpoint,
+            'p256dh'     => $p256dh,
+            'auth'       => $auth,
+            'user_agent' => (string)$request->header('user-agent'),
+        ]);
+        if ($res['code'] != 1) {
+            return json(['code' => 1001, 'msg' => $res['msg']]);
+        }
+        return json(['code' => 1, 'msg' => $res['msg']]);
+    }
+
+    /**
+     * 取消 Web Push 订阅（需登录）
+     * api.php/user/push_unsubscribe (POST)
+     * 参数：endpoint
+     */
+    public function push_unsubscribe(Request $request)
+    {
+        if (!$request->isPost()) {
+            return json(['code' => 1001, 'msg' => lang('param_err')]);
+        }
+        $check = model('User')->checkLogin();
+        if ($check['code'] > 1) return json(['code' => 1401, 'msg' => lang('api/please_login_first')]);
+        $uid = intval($check['info']['user_id']);
+
+        // 与其他写接口一致：登录态写操作需校验 CSRF
+        $csrfErr = $this->checkCsrf();
+        if ($csrfErr !== null) return json($csrfErr);
+
+        $endpoint = trim((string)$request->param('endpoint', ''));
+        if ($endpoint === '') {
+            return json(['code' => 1001, 'msg' => lang('param_err')]);
+        }
+        // 显式传入 $uid：仅退订当前登录用户自己的订阅，避免越权删除他人订阅
+        $res = model('PushSubscription')->deleteByEndpoint($endpoint, $uid);
+        return json(['code' => 1, 'msg' => $res['msg']]);
+    }
+
+
+    /**
      * 更新用户资料
      * api.php/user/update_info (POST)
      * 参数: [user_nick_name, user_email, user_phone, user_qq, user_old_pwd, user_new_pwd]

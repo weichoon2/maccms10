@@ -21,7 +21,10 @@ trait CsrfGuard
         // 过渡：允许带 X-Requested-With 的同站 AJAX（前端尚未加 token 前）
         $xhr = request()->header('x-requested-with') === 'XMLHttpRequest';
         $origin = request()->header('origin');
-        $host = request()->host();
+        // request()->host() 返回 HTTP_HOST，非标准端口时会带端口(如 localhost:8080)，
+        // 而 parse_url($origin, PHP_URL_HOST) 只有主机名不含端口，直接比对会在非标准端口部署下
+        // 把同源 AJAX 误判为跨站 → 订阅等写接口被拦成 1001 参数错误。这里统一只比对主机名。
+        $host = preg_replace('/:\d+$/', '', (string)request()->host());
         $sameOrigin = empty($origin) || parse_url($origin, PHP_URL_HOST) === $host;
         if ($xhr && $sameOrigin) {
             return null;

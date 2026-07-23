@@ -248,6 +248,14 @@ return array (
         'controller' => 'system',
         'action' => 'configsms',
       ),
+      293 => 
+      array (
+        'show' => 1,
+        'name' => lang('menu/configpush'),
+        'controller' => 'system',
+        'action' => 'configpush',
+      ),
+
       2910 => 
       array (
         'show' => 1,

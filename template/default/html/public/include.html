@@ -9,6 +9,7 @@
 <link rel="stylesheet" href="{$maccms.path}template/default/asset/css/iconfont-alicdn.css">
 <link rel="stylesheet" type="text/css" href="{$maccms.path}template/default/asset/css/public-head-early.css?v=202604161">
 <link rel="stylesheet" type="text/css" href="{$maccms.path}template/default/asset/css/black.css" id="macThemeDarkSheet">
+<link rel="stylesheet" href="{$maccms.path_tpl}asset/css/notify-bell.css?v=202607149">
 
 <script type="text/javascript" src="{$maccms.path}template/default/asset/js/jquery.js"></script>
 <script type="text/javascript" src="{$maccms.path}template/default/asset/js/head-sync.js?v=202604161"></script>
@@ -56,8 +57,16 @@ html.license-locked body::after {
 })();
 </script>
 
+<link rel="manifest" href="{:mac_url('pwa/manifest')}">
+<meta name="theme-color" content="#40cc92">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
 <link rel="apple-touch-icon-precomposed" sizes="180x180" href="{:mac_url_img(!empty($tplconfig['theme']['logo']['webapp']) ? $tplconfig['theme']['logo']['webapp'] : substr($maccms['path_tpl'], strlen($maccms['path'])).'asset/img/ios_fav.png')}">
 <link rel="shortcut icon" href="{:mac_url_img(!empty($tplconfig['theme']['logo']['icon']) ? $tplconfig['theme']['logo']['icon'] : substr($maccms['path_tpl'], strlen($maccms['path'])).'asset/img/favicon.ico')}" type="image/x-icon" />
+<script defer type="text/javascript" src="{$maccms.path_tpl}asset/js/pwa-register.js?v=202604162"></script>
+<script defer type="text/javascript" src="{$maccms.path_tpl}asset/js/push-subscribe.js?v=202607141"></script>
+<script defer type="text/javascript" src="{$maccms.path_tpl}asset/js/notify-bell.js?v=202607141"></script>
 
 <script type="text/javascript" src="{$maccms.path}template/default/asset/js/jquery.cookie.js"></script>
 <script defer type="text/javascript" src="{$maccms.path_tpl}/asset/js/vendor-lottie.js"></script>

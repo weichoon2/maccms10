@@ -35,9 +35,25 @@ class Timming extends Base
             //测试
             //$v['runtime']=0;
 
-            if( $v['status']=='1' &&
-                ( empty($v['runtime']) || ($oldweek."-".$oldhours) != ($curweek."-".$curhours) && strpos($v['weeks'],$curweek)!==false && strpos($v['hours'],$curhours)!==false  || $param['enforce'] =='1')
-               ) {
+            // 分钟/秒级任务支持：任务可选配置 interval（秒）。设置后按「距上次执行的时间间隔」判断，
+            // 突破默认的小时级粒度（如 push_broadcast 需每分钟派发一次队列）。未配置则维持原小时级逻辑。
+            $interval = isset($v['interval']) ? intval($v['interval']) : 0;
+            $weekOk = strpos($v['weeks'],$curweek)!==false;
+            $shouldRun = false;
+            if($v['status']=='1'){
+                if($param['enforce']=='1'){
+                    $shouldRun = true;
+                }elseif(empty($v['runtime'])){
+                    $shouldRun = true;
+                }elseif($interval > 0){
+                    $shouldRun = ($weekOk && (time() - intval($v['runtime'])) >= $interval);
+                }else{
+                    $shouldRun = (($oldweek."-".$oldhours) != ($curweek."-".$curhours) && $weekOk && strpos($v['hours'],$curhours)!==false);
+                }
+            }
+
+            if( $shouldRun ) {
+
                 mac_echo( lang('api/task_tip_exec',[$v['name'] ,$status,$last]));
                 $list[$k]['runtime'] = time();
 
@@ -161,4 +177,18 @@ class Timming extends Base
             mac_echo('[vodpublish] ids: ' . implode(',', $res['ids']));
         }
     }
+
+    /**
+     * Web Push 全员广播队列派发：管理员广播只入队，逐条 HTTPS POST 在此异步分批发送。
+     * 参数：batch=单批订阅数（默认100），max=单次运行订阅处理上限（默认500）。
+     */
+    protected function pushbroadcast($param)
+    {
+        @parse_str($param, $output);
+        $batch = isset($output['batch']) ? intval($output['batch']) : 100;
+        $max   = isset($output['max']) ? intval($output['max']) : 500;
+        $res = \app\common\util\PushDispatcher::runQueue($batch, $max);
+        mac_echo('[pushbroadcast] ' . (isset($res['msg']) ? $res['msg'] : '') . ' processed=' . (isset($res['processed']) ? intval($res['processed']) : 0));
+    }
 }
+
