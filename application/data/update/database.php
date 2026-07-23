@@ -1317,22 +1317,11 @@ if (!empty($col_list[$pre . 'vod'])) {
                 $config['monitor']['cron_token'] = mac_get_rndstr(32);
                 $changed = true;
             }
-            if ($changed) {
-                mac_arr2file($file, $config);
-            }
-        }
-    }
-}
-
-// AI 内容标注配置注入（PR-3）。幂等：只补缺失键，绝不覆盖站长已设值。
-// 默认关闭：开着就会烧 token，必须由站长显式开启。
-{
-    $file = APP_PATH . 'extra/maccms.php';
-    if (is_file($file)) {
-        @chmod($file, 0777);
-        $config = config('maccms');
-        if (is_array($config)) {
-            $changed = false;
+            // AI 内容标注配置注入（PR-3）。幂等：只补缺失键，绝不覆盖站长已设值。
+            // 默认关闭：开着就会烧 token，必须由站长显式开启。
+            // 合并进本块的单次读改写：若独立成块，会基于进程启动时的旧 config('maccms')
+            // 整文件回写，覆盖上面 analytics/monitor 本次刚补入的键（mac_arr2file 不刷新
+            // config() 内存缓存）。与 install/controller/Index.php 的单次写盘保持一致。
             if (!isset($config['ai_content']) || !is_array($config['ai_content'])) {
                 $config['ai_content'] = [];
                 $changed = true;
@@ -1349,9 +1338,9 @@ if (!empty($col_list[$pre . 'vod'])) {
                 'batch_size' => '20',
                 'auto_adopt_empty' => '0',
             ];
-            foreach ($aiContentFill as $k => $v) {
-                if (!isset($config['ai_content'][$k])) {
-                    $config['ai_content'][$k] = $v;
+            foreach ($aiContentFill as $ai_content_k => $ai_content_v) {
+                if (!isset($config['ai_content'][$ai_content_k])) {
+                    $config['ai_content'][$ai_content_k] = $ai_content_v;
                     $changed = true;
                 }
             }
