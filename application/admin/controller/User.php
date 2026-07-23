@@ -240,7 +240,18 @@ class User extends Base
         $this->assign('info', $info);
         $this->assign('group_list', $group_list);
         $this->assign('has_vip_group', $has_vip_group);
-        return $this->fetch('admin@user/info');
+        $profile = model('UserProfile')->getByUser($id);
+        $this->assign('profile', $profile);
+        $profile_types = [];
+        if ($profile && !empty($profile['prefer_types'])) {
+            $decoded = json_decode($profile['prefer_types'], true);
+            if (is_array($decoded)) {
+                $profile_types = $decoded;
+            }
+        }
+        $this->assign('profile_types', $profile_types);
+        $this->view->config('view_path', APP_PATH . 'admin/view_new/');
+        return $this->fetch('user/info');
     }
 
     public function del()

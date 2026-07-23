@@ -3,6 +3,7 @@ namespace app\common\controller;
 use think\Controller;
 use think\Cache;
 use think\Request;
+use app\common\util\AnalyticsServerTracker;
 
 class All extends Controller
 {
@@ -49,6 +50,10 @@ class All extends Controller
 
     protected function label_fetch($tpl,$loadcache=1,$type='html')
     {
+        // 埋点必须在 load_page_cache() 之前 —— 后者命中缓存会直接 echo+die，
+        // 放后面的话所有缓存命中的 PV 全部丢失。
+        $this->analytics_track();
+
         if($loadcache==1){
             $this->load_page_cache($tpl,$type);
         }
@@ -56,6 +61,9 @@ class All extends Controller
         if($GLOBALS['config']['app']['compress'] == 1){
             $html = mac_compress_html($html);
         }
+        // 埋点必须在 Cache::set() 之前注入，否则写入缓存的 HTML 不含 beacon，
+        // 缓存命中的页面永远不上报 stay_ms（详见 analytics_inject 注释）。
+        $html = $this->analytics_inject($html);
         if(defined('ENTRANCE') && ENTRANCE == 'index' && $GLOBALS['config']['app']['cache_page'] ==1  && $GLOBALS['config']['app']['cache_time_page'] ){
             $cach_name = $_SERVER['HTTP_HOST']. '_'. MAC_MOB . '_'. $GLOBALS['config']['app']['cache_flag']. '_' . $tpl .'_'. http_build_query(mac_param_url());
             $res = Cache::set($cach_name,$html,$GLOBALS['config']['app']['cache_time_page']);
@@ -75,6 +83,88 @@ polyfill;
             $html = str_replace('</body>', $polyfill . '</body>', $html);
         }
         return $html;
+    }
+
+    /**
+     * 服务端埋点。mid/rid/type_id 直接从 request 推导 ——
+     * 前端 beacon 只能从 ?tid= 猜 type_id，而 maccms 的 URL 根本不带 tid，
+     * 所以分类维度一直是空的。控制器上下文里这三个值是准的。
+     */
+    protected function analytics_track()
+    {
+        if (!AnalyticsServerTracker::isEnabled()) {
+            return;
+        }
+        // 静态生成（admin/Make）不是真实访客请求，不能写埋点；ismake 是 Make.php 设的可靠信号
+        if (!defined('ENTRANCE') || ENTRANCE != 'index' || !empty($GLOBALS['ismake'])) {
+            return;
+        }
+        if (strtolower(request()->controller()) === 'rss') {
+            return;
+        }
+        $ctrl = strtolower(request()->controller());
+        $ac = strtolower(request()->action());
+        $id = intval(input('param.id', 0));
+
+        $midMap = ['vod' => 1, 'art' => 2, 'manga' => 8];
+        $mid = isset($midMap[$ctrl]) ? $midMap[$ctrl] : 0;
+
+        $rid = 0;
+        $typeId = 0;
+        if ($mid > 0 && $id > 0) {
+            if ($ac === 'detail' || $ac === 'play' || $ac === 'down') {
+                $rid = $id;
+                $typeId = intval($this->analytics_type_of($mid, $rid));
+            } elseif ($ac === 'index' || $ac === 'type' || $ac === 'show') {
+                // 列表页：id 本身就是分类 id
+                $typeId = $id;
+            }
+        }
+        AnalyticsServerTracker::track($mid, $rid, $typeId);
+    }
+
+    private function analytics_type_of($mid, $rid)
+    {
+        $map = [1 => ['vod', 'vod_id'], 2 => ['art', 'art_id'], 8 => ['manga', 'manga_id']];
+        if (!isset($map[$mid])) {
+            return 0;
+        }
+        // type_id 基本不变，按 mid:rid 缓存 1 小时，避免热门内容每次访问（含页面缓存命中）都查一次库
+        $cacheKey = 'ana_tid_' . intval($mid) . '_' . intval($rid);
+        $cached = Cache::get($cacheKey);
+        if ($cached !== null && $cached !== false) {
+            return intval($cached);
+        }
+        try {
+            $typeId = intval(\think\Db::name($map[$mid][0])->where($map[$mid][1], intval($rid))->value('type_id'));
+        } catch (\Throwable $e) {
+            return 0;
+        }
+        Cache::set($cacheKey, $typeId, 3600);
+        return $typeId;
+    }
+
+    /**
+     * 注入 MAC_ANA_SS 开关位与 beacon 脚本。
+     * 用的是与上面 polyfill 完全相同的机制（PHP 侧改写 HTML），不碰 template/。
+     *
+     * MAC_ANA_SS=1：本次是动态渲染，服务端已记 pageview，beacon 只回填 stay_ms。
+     * MAC_ANA_SS=0：静态生成（ENTRANCE=='admin'，Make.php 产出的 HTML 由 nginx 直出，
+     *               PHP 不执行），beacon 必须走完整上报。
+     */
+    protected function analytics_inject($html)
+    {
+        if (!AnalyticsServerTracker::isEnabled()) {
+            return $html;
+        }
+        if (strtolower(request()->controller()) === 'rss') {
+            return $html;
+        }
+        $ss = (defined('ENTRANCE') && ENTRANCE == 'index') ? '1' : '0';
+        $src = MAC_PATH . 'static_new/js/analytics_beacon.js';
+        $tag = '<script>window.MAC_ANA_SS=' . $ss . ';</script>' . "\n"
+             . '<script src="' . $src . '" defer></script>' . "\n";
+        return str_replace('</body>', $tag . '</body>', $html);
     }
 
     protected function label_maccms()

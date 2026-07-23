@@ -239,6 +239,55 @@ class Index extends Controller
             $config_new['trusted_proxies'] = '';
         }
 
+        // 行为分析配置：全新安装写入默认值（缺失才补，与升级脚本 data/update/database.php 保持一致）
+        if (!isset($config_new['analytics']) || !is_array($config_new['analytics'])) {
+            $config_new['analytics'] = [];
+        }
+        if (!isset($config_new['analytics']['server_track'])) {
+            $config_new['analytics']['server_track'] = '0';
+        }
+        if (!isset($config_new['analytics']['track_region'])) {
+            $config_new['analytics']['track_region'] = '0';
+        }
+        if (!isset($config_new['analytics']['quality_fresh_halflife_days'])) {
+            $config_new['analytics']['quality_fresh_halflife_days'] = '30';
+        }
+        if (!isset($config_new['analytics']['quality_weights'])) {
+            $config_new['analytics']['quality_weights'] = [
+                'behavior' => '0.35',
+                'interact' => '0.30',
+                'complete' => '0.20',
+                'fresh'    => '0.15',
+            ];
+        }
+        if (!isset($config_new['analytics']['profile_window_days'])) {
+            $config_new['analytics']['profile_window_days'] = '30';
+        }
+        if (!isset($config_new['analytics']['quality_rank_enabled'])) {
+            $config_new['analytics']['quality_rank_enabled'] = '0';
+        }
+
+        // AI 内容标注配置：全新安装写入默认值（缺失才补，与升级脚本 data/update/database.php 保持一致）
+        if (!isset($config_new['ai_content']) || !is_array($config_new['ai_content'])) {
+            $config_new['ai_content'] = [];
+        }
+        $aiContentFill = [
+            'enabled'                    => '0',
+            'use_ai_search_credentials'  => '0',
+            'provider'                   => 'openai',
+            'model'                      => 'gpt-4o-mini',
+            'api_base'                   => '',
+            'api_key'                    => '',
+            'timeout'                    => '30',
+            'max_tokens'                 => '800',
+            'batch_size'                 => '20',
+            'auto_adopt_empty'           => '0',
+        ];
+        foreach ($aiContentFill as $ai_content_k => $ai_content_v) {
+            if (!isset($config_new['ai_content'][$ai_content_k])) {
+                $config_new['ai_content'][$ai_content_k] = $ai_content_v;
+            }
+        }
         // 监控与告警配置：全新安装写入默认值（缺失才补，与升级脚本 data/update/database.php 保持一致）
         if (!isset($config_new['monitor']) || !is_array($config_new['monitor'])) {
             $config_new['monitor'] = [];
@@ -338,6 +387,50 @@ class Index extends Controller
 					'hours'   => '00,01,02,03,04,05,06,07,08,09,10,11,12,13,14,15,16,17,18,19,20,21,22,23',
 					'runtime' => 0,
 				],
+				'content_ai_annotate' => [
+					'id'      => 'content_ai_annotate',
+					'status'  => '0',
+					'name'    => 'content_ai_annotate',
+					'des'     => 'AI内容标注批量生成',
+					'file'    => 'annotate',
+					'param'   => 'mid=1&limit=50',
+					'weeks'   => '1,2,3,4,5,6,0',
+					'hours'   => '02',
+					'runtime' => 0,
+				],
+				'content_quality' => [
+					'id'      => 'content_quality',
+					'status'  => '0',
+					'name'    => 'content_quality',
+					'des'     => '内容质量分批量计算',
+					'file'    => 'content_quality',
+					'param'   => 'mid=1&limit=200&days=30',
+					'weeks'   => '1,2,3,4,5,6,0',
+					'hours'   => '03',
+					'runtime' => 0,
+				],
+				'content_quality_art' => [
+					'id'      => 'content_quality_art',
+					'status'  => '0',
+					'name'    => 'content_quality_art',
+					'des'     => '内容质量分批量计算-文章',
+					'file'    => 'content_quality',
+					'param'   => 'mid=2&limit=200&days=30',
+					'weeks'   => '1,2,3,4,5,6,0',
+					'hours'   => '04',
+					'runtime' => 0,
+				],
+				'user_profile' => [
+					'id'      => 'user_profile',
+					'status'  => '0',
+					'name'    => 'user_profile',
+					'des'     => '用户画像批量计算',
+					'file'    => 'user_profile',
+					'param'   => 'limit=200&days=30',
+					'weeks'   => '1,2,3,4,5,6,0',
+					'hours'   => '05',
+					'runtime' => 0,
+				],
 				// PWA Web Push：广播队列派发任务（feat-pwa）。与 update/database.php 保持一致，
 				// 保证全新安装也具备派发任务，否则 push_queue 入队后无任务派发、公告收不到。
 				'push_broadcast' => [
@@ -351,7 +444,6 @@ class Index extends Controller
 					'hours'    => '00,01,02,03,04,05,06,07,08,09,10,11,12,13,14,15,16,17,18,19,20,21,22,23',
 					'interval' => 60,
 					'runtime'  => 0,
-
 				],
 			];
 			$_timming_changed = false;
@@ -370,6 +462,8 @@ class Index extends Controller
 			}
 			unset($_timming_file, $_timming, $_timming_defaults, $_timming_changed, $_k, $_task);
 		}
+
+		// content_ai_annotate / content_quality[_art] / user_profile 定时任务已并入上方自包含 $_timming_defaults 块统一幂等注入，不依赖 common.php。
 
         // 导入系统初始数据库结构
         // 导入SQL

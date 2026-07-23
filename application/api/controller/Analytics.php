@@ -8,6 +8,9 @@ use think\Request;
 
 class Analytics extends Base
 {
+    // page_leave 回填的 stay_ms 上限（毫秒）：24 小时。超过视为客户端上报的异常/伪造值，做钳制而非直接丢弃。
+    const MAX_STAY_MS = 86400000;
+
     public function session(Request $request)
     {
         $payload = $this->payload($request);
@@ -20,7 +23,7 @@ class Analytics extends Base
             return $this->jsonError('session_key required');
         }
         $visitorId = $this->strVal($payload, 'visitor_id', 64);
-        $userId = intval(isset($payload['user_id']) ? $payload['user_id'] : cookie('user_id'));
+        $userId = intval(cookie('user_id'));
         $startedAt = $this->intVal($payload, 'started_at', time());
         $endedAt = $this->intVal($payload, 'ended_at', 0);
         $pageCount = max(0, $this->intVal($payload, 'page_count', 0));
@@ -72,7 +75,7 @@ class Analytics extends Base
         $ts = $this->intVal($payload, 'ts', time());
         $sessionId = $this->resolveSessionId($payload);
         $visitorId = $this->strVal($payload, 'visitor_id', 64);
-        $userId = intval(isset($payload['user_id']) ? $payload['user_id'] : cookie('user_id'));
+        $userId = intval(cookie('user_id'));
         $stayMs = max(0, $this->intVal($payload, 'stay_ms', 0));
         $mid = $this->intVal($payload, 'mid', 0);
         $rid = $this->intVal($payload, 'rid', 0);
@@ -129,7 +132,7 @@ class Analytics extends Base
         $ts = $this->intVal($payload, 'ts', time());
         $sessionId = $this->resolveSessionId($payload);
         $visitorId = $this->strVal($payload, 'visitor_id', 64);
-        $userId = intval(isset($payload['user_id']) ? $payload['user_id'] : cookie('user_id'));
+        $userId = intval(cookie('user_id'));
         $props = isset($payload['props']) ? $payload['props'] : [];
         if (!is_array($props)) {
             $props = [];
@@ -156,14 +159,36 @@ class Analytics extends Base
             'ts' => $ts,
             'stat_date' => date('Y-m-d', $ts),
         ]);
+
+        if ($eventCode === 'page_leave') {
+            $this->backfillStayMs($sessionId, $payload, $props);
+        }
+
         return json(['code' => 1, 'msg' => 'ok', 'data' => ['event_id' => intval($id)]]);
     }
 
     public function aggregate(Request $request)
     {
+        // 这是重操作且接口公开，只允许 POST 并严格限流，防止匿名刷爆数据库。
+        if (!$request->isPost()) {
+            return $this->jsonError('method not allowed');
+        }
+        if (!$this->consumeAnalyticsRate('aggregate', 'ip', request()->ip(0, true), 3, 60)
+            || !$this->consumeAnalyticsRate('aggregate', 'global', 'all', 10, 60)) {
+            return $this->jsonError('rate limit exceeded');
+        }
         $mode = strtolower($this->strVal($request->param(), 'mode', 16));
         if ($mode !== 'day') {
             $mode = 'hour';
+        }
+        if ($mode === 'day') {
+            // 全天重聚合是重操作：仅允许后台已登录管理员触发。
+            // 定时任务经 api/Timming 直接调用聚合器，不走此公开接口，因此不受影响。
+            $adminChk = (new \app\common\model\Admin())->checkLogin();
+            $isAdmin = is_array($adminChk) && isset($adminChk['code']) && intval($adminChk['code']) <= 1;
+            if (!$isAdmin) {
+                return $this->jsonError('day mode requires admin');
+            }
         }
         $date = $this->strVal($request->param(), 'date', 32);
         $res = $mode === 'day'
@@ -188,16 +213,64 @@ class Analytics extends Base
 
     private function resolveSessionId($payload)
     {
-        $sessionId = max(0, $this->intVal($payload, 'session_id', 0));
-        if ($sessionId > 0) {
-            return $sessionId;
-        }
+        // 只认服务端可校验的 session_key（session() 建立时由后端种下、随机 64 位），
+        // 忽略客户端直传的数字 session_id：后者可被枚举，用来定位并篡改他人会话的 pageview。
         $sessionKey = $this->strVal($payload, 'session_key', 64);
         if ($sessionKey === '') {
             return 0;
         }
         $exists = Db::name('AnalyticsSession')->where('session_key', $sessionKey)->value('session_id');
         return intval($exists);
+    }
+
+    /**
+     * 把前端 page_leave 带回来的 stay_ms 回填到服务端已经写好的 pageview 行。
+     *
+     * 服务端埋点是 pageview 行的唯一创建者，但它拿不到「用户在这页待了多久」——
+     * 那只有浏览器知道。所以前端不再 insert，只 update。
+     * 匹配：同 session + 同 path + 30 分钟内的最新一行。匹配不到就丢弃，绝不新建行，
+     * 否则同一次浏览会出现两条记录，PV 直接翻倍。
+     */
+    private function backfillStayMs($sessionId, $payload, $props)
+    {
+        $sessionId = intval($sessionId);
+        if ($sessionId <= 0) {
+            return;
+        }
+        $stayMs = 0;
+        if (isset($props['stay_ms'])) {
+            $stayMs = intval($props['stay_ms']);
+        }
+        if ($stayMs <= 0) {
+            return;
+        }
+        if ($stayMs > self::MAX_STAY_MS) {
+            $stayMs = self::MAX_STAY_MS;
+        }
+        $path = $this->strVal($payload, 'path', 512);
+        if ($path === '' || !$this->isAllowedPath($path)) {
+            return;
+        }
+
+        // 除 session_id + path + 时间窗外再绑定 visitor_id：pageview 行写入时已记录 visitor_id，
+        // 回填必须由同一 visitor 触发，杜绝借他人会话的 pageview 越权改写 stay_ms。
+        $visitorId = $this->strVal($payload, 'visitor_id', 64);
+        if ($visitorId === '') {
+            return;
+        }
+        $row = Db::name('AnalyticsPageview')
+            ->where('session_id', $sessionId)
+            ->where('visitor_id', $visitorId)
+            ->where('path', $path)
+            ->where('ts', '>=', time() - 1800)
+            ->order('ts desc,analytics_pageview_id desc')
+            ->find();
+        if (empty($row)) {
+            return;
+        }
+        Db::name('AnalyticsPageview')
+            ->where('analytics_pageview_id', intval($row['analytics_pageview_id']))
+            ->update(['stay_ms' => $stayMs]);
     }
 
     private function strVal($src, $key, $max)

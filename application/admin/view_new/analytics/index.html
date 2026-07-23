@@ -15,6 +15,7 @@
                     <option value="category" {if condition="$param['dim_type'] eq 'category'"}selected{/if}>{:lang('admin/analytics/dim_category')}</option>
                     <option value="channel" {if condition="$param['dim_type'] eq 'channel'"}selected{/if}>{:lang('admin/analytics/dim_channel')}</option>
                     <option value="os" {if condition="$param['dim_type'] eq 'os'"}selected{/if}>{:lang('admin/analytics/dim_os')}</option>
+                    <option value="browser" {if condition="$param['dim_type'] eq 'browser'"}selected{/if}>{:lang('admin/analytics/dim_browser')}</option>
                 </select>
             </div>
             <button class="layui-btn">{:lang('btn_search')}</button>
@@ -71,6 +72,15 @@
             </div>
         </div>
     </div>
+
+    <div class="layui-row layui-col-space15 mt10">
+        <div class="layui-col-md12">
+            <div class="layui-card">
+                <div class="layui-card-header">{:lang('admin/analytics/top_paths_title')}</div>
+                <div class="layui-card-body"><div id="topPathsChart" style="height:300px;"></div></div>
+            </div>
+        </div>
+    </div>
 </div>
 
 <script src="/static_new/js/apexcharts.min.js"></script>
@@ -82,15 +92,25 @@
         laydate.render({elem: '#end_date', type: 'date'});
     });
 
-    var trendChart = new ApexCharts(document.querySelector('#trendChart'), {
-        chart: {type: 'line', height: 300, toolbar: {show: false}},
-        series: [
-            {name: 'PV', data: report.overview.trend_pv},
-            {name: 'UV', data: report.overview.trend_uv}
-        ],
-        xaxis: {categories: report.overview.trend_days}
-    });
-    trendChart.render();
+    if (report.overview.trend_days && report.overview.trend_days.length) {
+        var trendOrderAmountName = '{:lang("admin/analytics/trend_order_amount")}';
+        var trendChart = new ApexCharts(document.querySelector('#trendChart'), {
+            chart: {type: 'line', height: 300, toolbar: {show: false}},
+            series: [
+                {name: 'PV', data: report.overview.trend_pv},
+                {name: 'UV', data: report.overview.trend_uv},
+                {name: trendOrderAmountName, type: 'column', data: report.overview.trend_order_amount}
+            ],
+            xaxis: {categories: report.overview.trend_days},
+            yaxis: [
+                {title: {text: 'PV/UV'}},
+                {opposite: true, seriesName: trendOrderAmountName, title: {text: trendOrderAmountName}}
+            ]
+        });
+        trendChart.render();
+    } else {
+        document.querySelector('#trendChart').innerHTML = '<div style="text-align:center;padding-top:120px;color:#999;">{:lang("admin/analytics/empty")}</div>';
+    }
 
     var dimNames = [];
     var dimPvs = [];
@@ -118,6 +138,31 @@
         xaxis: {categories: contentNames}
     });
     contentChart.render();
+
+    // top_paths 漏斗图：vendored ApexCharts v3.50 无 sankey 图（grep 零命中），且不引入新前端库；
+    // top_paths 本身是按 pv 降序的热门页面列表，天然呈漏斗形，故用 ApexCharts funnel
+    // （chart.type:'bar' + plotOptions.bar.isFunnel:true + horizontal + distributed）呈现。
+    // top_flows（prev->path 边数据，非漏斗形）保留上方现有表格，不受影响。
+    var topPaths = report.behavior.top_paths || [];
+    if (topPaths.length) {
+        var pathNames = [];
+        var pathPvs = [];
+        topPaths.forEach(function (it) {
+            pathNames.push(it.path);
+            pathPvs.push(it.pv);
+        });
+        var topPathsChart = new ApexCharts(document.querySelector('#topPathsChart'), {
+            chart: {type: 'bar', height: 300, toolbar: {show: false}},
+            plotOptions: {bar: {isFunnel: true, horizontal: true, distributed: true}},
+            series: [{name: 'PV', data: pathPvs}],
+            xaxis: {categories: pathNames},
+            dataLabels: {enabled: true, formatter: function (val, opt) { return opt.w.globals.labels[opt.dataPointIndex] + ': ' + val; }},
+            legend: {show: false}
+        });
+        topPathsChart.render();
+    } else {
+        document.querySelector('#topPathsChart').innerHTML = '<div style="text-align:center;padding-top:120px;color:#999;">{:lang("admin/analytics/empty")}</div>';
+    }
 </script>
 {include file="../../../application/admin/view_new/public/foot" /}
 </body>

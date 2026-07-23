@@ -177,6 +177,13 @@ return array (
         'controller' => 'system',
         'action' => 'configthemeai',
       ),
+      219 =>
+      array (
+        'show' => 1,
+        'name' => lang('admin/system/configaicontent'),
+        'controller' => 'system',
+        'action' => 'configaicontent',
+      ),
 
       22 => 
       array (
@@ -1418,6 +1425,13 @@ return array (
         'controller' => 'analytics',
         'action' => 'index',
       ),
+      6711 =>
+      array (
+        'show' => 0,
+        'name' => '--'.lang('admin/system/configanalytics'),
+        'controller' => 'system',
+        'action' => 'configanalytics',
+      ),
       6701 => 
       array (
         'show' => 0,
@@ -1488,7 +1502,49 @@ return array (
         'controller' => 'adminaudit',
         'action' => 'info',
       ),
-      68 => 
+      673 =>
+      array (
+        'show' => 1,
+        'name' => lang('menu/aiannotation'),
+        'controller' => 'ai_annotation',
+        'action' => 'index',
+      ),
+      6731 =>
+      array (
+        'show' => 0,
+        'name' => '--'.lang('admin/aiannotation/generate'),
+        'controller' => 'ai_annotation',
+        'action' => 'generate',
+      ),
+      6732 =>
+      array (
+        'show' => 0,
+        'name' => '--'.lang('admin/aiannotation/adopt'),
+        'controller' => 'ai_annotation',
+        'action' => 'adopt',
+      ),
+      6733 =>
+      array (
+        'show' => 0,
+        'name' => '--'.lang('admin/aiannotation/reject'),
+        'controller' => 'ai_annotation',
+        'action' => 'reject',
+      ),
+      674 =>
+      array (
+        'show' => 1,
+        'name' => lang('menu/content_quality'),
+        'controller' => 'content_quality',
+        'action' => 'index',
+      ),
+      6741 =>
+      array (
+        'show' => 0,
+        'name' => '--'.lang('admin/content_quality/mark_recommend'),
+        'controller' => 'content_quality',
+        'action' => 'markRecommend',
+      ),
+      68 =>
       array (
         'show' => 1,
         'name' => lang('menu/cash'),

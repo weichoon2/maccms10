@@ -108,6 +108,8 @@ if(empty($col_list[$pre.'notify_read'])){
     $sql .= "ALTER TABLE `{$pre}notify_read` ENGINE=InnoDB;";
     $sql .="\r";
 }
+// 定时任务（notify_vip_expire / content_ai_annotate / content_quality[_art] / user_profile）
+// 统一由下方自包含 $_timming_defaults 块幂等注入（读取→检查→仅补缺失键→回写），不依赖 common.php。
 // 优惠券 + 限时折扣（Issue 3）：mac_coupon / mac_coupon_user / mac_group 活动字段 / mac_order.order_remarks 扩容
 if(empty($col_list[$pre.'coupon'])){
     $sql .= "CREATE TABLE `{$pre}coupon` ( `coupon_id` int(10) unsigned NOT NULL AUTO_INCREMENT, `coupon_name` varchar(100) NOT NULL DEFAULT '', `coupon_type` varchar(20) NOT NULL DEFAULT 'amount', `coupon_value` decimal(10,2) unsigned NOT NULL DEFAULT '0.00', `coupon_min_price` decimal(10,2) unsigned NOT NULL DEFAULT '0.00', `coupon_scene` varchar(20) NOT NULL DEFAULT 'all', `coupon_target` text NOT NULL, `coupon_total` int(10) unsigned NOT NULL DEFAULT '0', `coupon_received` int(10) unsigned NOT NULL DEFAULT '0', `coupon_used` int(10) unsigned NOT NULL DEFAULT '0', `coupon_per_user` int(10) unsigned NOT NULL DEFAULT '1', `coupon_start_time` int(10) unsigned NOT NULL DEFAULT '0', `coupon_end_time` int(10) unsigned NOT NULL DEFAULT '0', `coupon_status` tinyint(1) unsigned NOT NULL DEFAULT '1', `coupon_time` int(10) unsigned NOT NULL DEFAULT '0', PRIMARY KEY (`coupon_id`), KEY `coupon_time` (`coupon_time`) ) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8;";
@@ -235,6 +237,50 @@ if(empty($col_list[$pre.'seckill_user'])){
             'hours'   => '00,01,02,03,04,05,06,07,08,09,10,11,12,13,14,15,16,17,18,19,20,21,22,23',
             'runtime' => 0,
         ],
+        'content_ai_annotate' => [
+            'id'      => 'content_ai_annotate',
+            'status'  => '0',
+            'name'    => 'content_ai_annotate',
+            'des'     => 'AI内容标注批量生成',
+            'file'    => 'annotate',
+            'param'   => 'mid=1&limit=50',
+            'weeks'   => '1,2,3,4,5,6,0',
+            'hours'   => '02',
+            'runtime' => 0,
+        ],
+        'content_quality' => [
+            'id'      => 'content_quality',
+            'status'  => '0',
+            'name'    => 'content_quality',
+            'des'     => '内容质量分批量计算',
+            'file'    => 'content_quality',
+            'param'   => 'mid=1&limit=200&days=30',
+            'weeks'   => '1,2,3,4,5,6,0',
+            'hours'   => '03',
+            'runtime' => 0,
+        ],
+        'content_quality_art' => [
+            'id'      => 'content_quality_art',
+            'status'  => '0',
+            'name'    => 'content_quality_art',
+            'des'     => '内容质量分批量计算-文章',
+            'file'    => 'content_quality',
+            'param'   => 'mid=2&limit=200&days=30',
+            'weeks'   => '1,2,3,4,5,6,0',
+            'hours'   => '04',
+            'runtime' => 0,
+        ],
+        'user_profile' => [
+            'id'      => 'user_profile',
+            'status'  => '0',
+            'name'    => 'user_profile',
+            'des'     => '用户画像批量计算',
+            'file'    => 'user_profile',
+            'param'   => 'limit=200&days=30',
+            'weeks'   => '1,2,3,4,5,6,0',
+            'hours'   => '05',
+            'runtime' => 0,
+        ],
         // PWA Web Push：广播队列派发任务（feat-pwa）。存量站点升级不覆盖 extra/timming.php，
         // 必须在此注入，否则 push_queue 入队后无任务派发，公告永远卡在 status=0 收不到。
         // 字段与 extra/timming.php 权威版一致：file=pushbroadcast 对应 api/controller/Timming::pushbroadcast()。
@@ -249,7 +295,6 @@ if(empty($col_list[$pre.'seckill_user'])){
             'hours'    => '00,01,02,03,04,05,06,07,08,09,10,11,12,13,14,15,16,17,18,19,20,21,22,23',
             'interval' => 60,
             'runtime'  => 0,
-
         ],
     ];
     $_timming_changed = false;
@@ -503,6 +548,21 @@ if(empty($col_list[$pre.'analytics_content_day'])){
 if(empty($col_list[$pre.'analytics_retention_cohort'])){
     $sql .= "CREATE TABLE `{$pre}analytics_retention_cohort` (`cohort_date` date NOT NULL COMMENT 'cohort 基准日（常用：注册日）',`cohort_type` varchar(16) NOT NULL DEFAULT 'register',`return_day` smallint(5) unsigned NOT NULL COMMENT '回访间隔天 0=当日 1=次日',`user_cnt` int(10) unsigned NOT NULL DEFAULT '0' COMMENT '该日仍活跃用户数',`updated_at` int(10) unsigned NOT NULL DEFAULT '0',PRIMARY KEY (`cohort_date`,`cohort_type`,`return_day`),KEY `idx_cohort` (`cohort_date`,`cohort_type`)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='运营统计-留存 cohort';";
     $sql .="\r";
+}
+//内容 AI 标注结果（待采纳队列）
+if(empty($col_list[$pre.'content_ai_annotation'])){
+    $sql .= "CREATE TABLE `{$pre}content_ai_annotation` (`id` int(11) unsigned NOT NULL AUTO_INCREMENT,`mid` tinyint(1) unsigned NOT NULL DEFAULT '0' COMMENT '模块 1=视频 2=文章',`content_id` int(10) unsigned NOT NULL DEFAULT '0' COMMENT '内容 ID',`ai_tags` varchar(500) NOT NULL DEFAULT '' COMMENT 'AI 建议标签，逗号分隔',`ai_summary` varchar(1000) NOT NULL DEFAULT '' COMMENT 'AI 建议摘要',`ai_type_id` smallint(6) unsigned NOT NULL DEFAULT '0' COMMENT 'AI 建议分类，0=无建议',`ai_confidence` decimal(4,3) unsigned NOT NULL DEFAULT '0.000' COMMENT '模型自评置信度 0-1',`source_hash` char(40) NOT NULL DEFAULT '' COMMENT '源文本 SHA1，用于变更检测',`status` tinyint(1) unsigned NOT NULL DEFAULT '0' COMMENT '0=待采纳 1=已采纳 2=已拒绝 3=生成失败',`provider` varchar(32) NOT NULL DEFAULT '',`model` varchar(64) NOT NULL DEFAULT '',`error_msg` varchar(255) NOT NULL DEFAULT '',`time_add` int(10) unsigned NOT NULL DEFAULT '0',`time_update` int(10) unsigned NOT NULL DEFAULT '0',PRIMARY KEY (`id`),UNIQUE KEY `uk_obj` (`mid`,`content_id`),KEY `idx_status` (`status`),KEY `idx_time_update` (`time_update`)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='内容 AI 标注结果（待采纳队列）';";
+    $sql .= "\r";
+}
+//内容质量分
+if(empty($col_list[$pre.'content_quality'])){
+    $sql .= "CREATE TABLE `{$pre}content_quality` (`id` int(11) unsigned NOT NULL AUTO_INCREMENT,`mid` tinyint(1) unsigned NOT NULL DEFAULT '0' COMMENT '模块 1=视频 2=文章',`content_id` int(10) unsigned NOT NULL DEFAULT '0' COMMENT '内容 ID',`type_id` smallint(6) unsigned NOT NULL DEFAULT '0' COMMENT '分类，冗余便于按类分析',`score_total` decimal(5,2) NOT NULL DEFAULT '0.00' COMMENT '综合质量分',`score_behavior` decimal(5,2) NOT NULL DEFAULT '0.00' COMMENT '行为分',`score_interact` decimal(5,2) NOT NULL DEFAULT '0.00' COMMENT '互动分',`score_complete` decimal(5,2) NOT NULL DEFAULT '0.00' COMMENT '完整度分',`score_fresh` decimal(5,2) NOT NULL DEFAULT '0.00' COMMENT '新鲜度分',`is_cold_start` tinyint(1) unsigned NOT NULL DEFAULT '0' COMMENT '是否冷启动内容',`calc_date` date NOT NULL DEFAULT '1970-01-01' COMMENT '计算日期',`time_add` int(10) unsigned NOT NULL DEFAULT '0',`time_update` int(10) unsigned NOT NULL DEFAULT '0',PRIMARY KEY (`id`),UNIQUE KEY `uk_obj` (`mid`,`content_id`),KEY `idx_score` (`mid`,`score_total`),KEY `idx_type` (`type_id`)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='内容质量分';";
+    $sql .= "\r";
+}
+//用户画像
+if(empty($col_list[$pre.'user_profile'])){
+    $sql .= "CREATE TABLE `{$pre}user_profile` (`id` int(10) unsigned NOT NULL AUTO_INCREMENT,`user_id` int(10) unsigned NOT NULL DEFAULT '0' COMMENT '用户ID',`prefer_types` varchar(500) NOT NULL DEFAULT '' COMMENT '偏好分类 JSON [{type_id,w}] Top-N',`prefer_tags` varchar(1000) NOT NULL DEFAULT '' COMMENT '偏好标签 JSON Top-N',`avg_completion_rate` decimal(5,4) NOT NULL DEFAULT '0.0000' COMMENT '平均完播率 0-1',`watch_cnt_window` int(10) unsigned NOT NULL DEFAULT '0' COMMENT '窗口内播放次数',`pay_amount_window` decimal(10,2) NOT NULL DEFAULT '0.00' COMMENT '窗口内消费金额',`activity_level` tinyint(1) NOT NULL DEFAULT '0' COMMENT '活跃度 0沉睡 1低 2中 3高',`last_active_time` int(10) NOT NULL DEFAULT '0' COMMENT '最后活跃时间戳',`calc_date` date NOT NULL DEFAULT '1970-01-01' COMMENT '计算日期',`time_add` int(10) NOT NULL DEFAULT '0',`time_update` int(10) NOT NULL DEFAULT '0',PRIMARY KEY (`id`),UNIQUE KEY `uk_user` (`user_id`),KEY `idx_activity` (`activity_level`)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='用户画像';";
+    $sql .= "\r";
 }
 // 聊天室消息表
 if(empty($col_list[$pre.'chatroom'])){
@@ -1172,6 +1232,9 @@ if (!empty($col_list[$pre . 'vod'])) {
     }
 }
 
+// 行为分析配置注入（PR-1）：server_track / track_region。
+// 幂等：只补缺失键，绝不覆盖站长已设值 —— extra/maccms.php 是运行期数据。
+// 默认全关：服务端埋点每个 PV 一次 INSERT，不能在升级后擅自给存量站加写压力。
 // 监控与告警配置注入：enabled / cron_token / 请求埋点开关 / 保留期 等。
 // 幂等：只补缺失键，不覆盖站长已设值；cron_token 仅在缺失或过短时生成
 // （每次升级都换 token 会让站长已配置的 crontab 直接失效）。
@@ -1182,6 +1245,32 @@ if (!empty($col_list[$pre . 'vod'])) {
         $config = config('maccms');
         if (is_array($config)) {
             $changed = false;
+            if (!isset($config['analytics']) || !is_array($config['analytics'])) {
+                $config['analytics'] = [];
+                $changed = true;
+            }
+            $analyticsFill = [
+                'server_track' => '0',
+                'track_region' => '0',
+                'quality_fresh_halflife_days' => '30',
+                'profile_window_days' => '30',
+                'quality_rank_enabled' => '0',
+            ];
+            foreach ($analyticsFill as $k => $v) {
+                if (!isset($config['analytics'][$k])) {
+                    $config['analytics'][$k] = $v;
+                    $changed = true;
+                }
+            }
+            if (!isset($config['analytics']['quality_weights'])) {
+                $config['analytics']['quality_weights'] = [
+                    'behavior' => '0.35',
+                    'interact' => '0.30',
+                    'complete' => '0.20',
+                    'fresh'    => '0.15',
+                ];
+                $changed = true;
+            }
             if (!isset($config['monitor']) || !is_array($config['monitor'])) {
                 $config['monitor'] = [];
                 $changed = true;
@@ -1227,6 +1316,44 @@ if (!empty($col_list[$pre . 'vod'])) {
                 || strlen(trim((string)$config['monitor']['cron_token'])) < 16) {
                 $config['monitor']['cron_token'] = mac_get_rndstr(32);
                 $changed = true;
+            }
+            if ($changed) {
+                mac_arr2file($file, $config);
+            }
+        }
+    }
+}
+
+// AI 内容标注配置注入（PR-3）。幂等：只补缺失键，绝不覆盖站长已设值。
+// 默认关闭：开着就会烧 token，必须由站长显式开启。
+{
+    $file = APP_PATH . 'extra/maccms.php';
+    if (is_file($file)) {
+        @chmod($file, 0777);
+        $config = config('maccms');
+        if (is_array($config)) {
+            $changed = false;
+            if (!isset($config['ai_content']) || !is_array($config['ai_content'])) {
+                $config['ai_content'] = [];
+                $changed = true;
+            }
+            $aiContentFill = [
+                'enabled' => '0',
+                'use_ai_search_credentials' => '0',
+                'provider' => 'openai',
+                'model' => 'gpt-4o-mini',
+                'api_base' => '',
+                'api_key' => '',
+                'timeout' => '30',
+                'max_tokens' => '800',
+                'batch_size' => '20',
+                'auto_adopt_empty' => '0',
+            ];
+            foreach ($aiContentFill as $k => $v) {
+                if (!isset($config['ai_content'][$k])) {
+                    $config['ai_content'][$k] = $v;
+                    $changed = true;
+                }
             }
             if ($changed) {
                 mac_arr2file($file, $config);

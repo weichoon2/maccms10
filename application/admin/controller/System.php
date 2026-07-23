@@ -1753,6 +1753,121 @@ class System extends Base
         return $this->fetch('system/configthemeai');
     }
 
+    public function configanalytics()
+    {
+        if (Request()->isPost()) {
+            $post = input('post.', '', 'htmlentities');
+            $validate = \think\Loader::validate('Token');
+            if (!$validate->check($post)) {
+                $err = $validate->getError();
+                $msg = is_scalar($err) ? (string)$err : lang('param_err');
+                return $this->ajaxErrorWithFreshToken($msg);
+            }
+            unset($post['__token__']);
+
+            $config_old = config('maccms');
+            $an = isset($post['analytics']) && is_array($post['analytics']) ? $post['analytics'] : [];
+
+            $row = [
+                'server_track' => isset($an['server_track']) && (string)$an['server_track'] === '1' ? '1' : '0',
+                'track_region' => isset($an['track_region']) && (string)$an['track_region'] === '1' ? '1' : '0',
+            ];
+
+            $old_analytics = (isset($config_old['analytics']) && is_array($config_old['analytics'])) ? $config_old['analytics'] : [];
+            $config_new = $config_old;
+            $config_new['analytics'] = array_merge($old_analytics, $row);
+
+            $res = mac_arr2file(APP_PATH . 'extra/maccms.php', $config_new);
+            if ($res === false) {
+                return $this->ajaxErrorWithFreshToken(lang('save_err'));
+            }
+            return $this->success(lang('save_ok'));
+        }
+
+        $config = config('maccms');
+        if (!isset($config['analytics']) || !is_array($config['analytics'])) {
+            $config['analytics'] = [];
+        }
+        $config['analytics'] = array_merge([
+            'server_track' => '0',
+            'track_region' => '0',
+        ], $config['analytics']);
+
+        // 行为分析开关配置页迁移到新版后台主题（view_new）；旧版 view/ 不再承载新功能（铁律 2）
+        $this->assign('config', $config);
+        $this->assign('title', lang('admin/system/configanalytics'));
+        $this->view->config('view_path', APP_PATH . 'admin/view_new/');
+        return $this->fetch('system/configanalytics');
+    }
+
+    public function configaicontent()
+    {
+        if (Request()->isPost()) {
+            $post = input('post.', '', 'htmlentities');
+            $validate = \think\Loader::validate('Token');
+            if (!$validate->check($post)) {
+                $err = $validate->getError();
+                $msg = is_scalar($err) ? (string)$err : lang('param_err');
+                return $this->ajaxErrorWithFreshToken($msg);
+            }
+            unset($post['__token__']);
+
+            $config_old = config('maccms');
+            $ai = isset($post['ai_content']) && is_array($post['ai_content']) ? $post['ai_content'] : [];
+
+            $sanitize = function ($v) {
+                return trim(strip_tags((string)$v));
+            };
+
+            $providers = ['openai', 'claude', 'gemini', 'deepseek', 'qwen', 'glm'];
+            $provider = strtolower($sanitize(isset($ai['provider']) ? $ai['provider'] : 'openai'));
+            if (!in_array($provider, $providers, true)) {
+                $provider = 'openai';
+            }
+
+            $row = [
+                'enabled' => isset($ai['enabled']) && (string)$ai['enabled'] === '1' ? '1' : '0',
+                'use_ai_search_credentials' => isset($ai['use_ai_search_credentials']) && (string)$ai['use_ai_search_credentials'] === '1' ? '1' : '0',
+                'provider' => $provider,
+                'model' => $sanitize(isset($ai['model']) ? $ai['model'] : 'gpt-4o-mini'),
+                'api_base' => $sanitize(isset($ai['api_base']) ? $ai['api_base'] : ''),
+                'timeout' => (string)max(5, intval(isset($ai['timeout']) ? $ai['timeout'] : 30)),
+                'max_tokens' => (string)max(256, intval(isset($ai['max_tokens']) ? $ai['max_tokens'] : 800)),
+                'batch_size' => (string)max(1, min(100, intval(isset($ai['batch_size']) ? $ai['batch_size'] : 20))),
+                'auto_adopt_empty' => isset($ai['auto_adopt_empty']) && (string)$ai['auto_adopt_empty'] === '1' ? '1' : '0',
+            ];
+
+            // 金钥留空 = 保留旧值。从最新的配置文件读，避免配置缓存过期把 key 弄丢。
+            $newKey = isset($ai['api_key']) ? trim((string)$ai['api_key']) : '';
+            if ($newKey !== '') {
+                $row['api_key'] = $newKey;
+            } else {
+                $cfgFile = APP_PATH . 'extra/maccms.php';
+                $latest = is_file($cfgFile) ? include $cfgFile : [];
+                if (isset($latest['ai_content']['api_key']) && $latest['ai_content']['api_key'] !== '') {
+                    $row['api_key'] = (string)$latest['ai_content']['api_key'];
+                } else {
+                    $row['api_key'] = isset($config_old['ai_content']['api_key']) ? $config_old['ai_content']['api_key'] : '';
+                }
+            }
+
+            $config_new = $config_old;
+            $config_new['ai_content'] = $row;
+
+            $res = mac_arr2file(APP_PATH . 'extra/maccms.php', $config_new);
+            if ($res === false) {
+                return $this->ajaxErrorWithFreshToken(lang('save_err'));
+            }
+            return $this->success(lang('save_ok'));
+        }
+
+        $this->assign('config', config('maccms'));
+        $this->assign('title', lang('admin/system/configaicontent'));
+        // AI 内容标注配置页仅放新版后台主题（view_new）；旧版 view/ 不再承载新功能（铁律 2）
+        $this->view->config('view_path', APP_PATH . 'admin/view_new/');
+        return $this->fetch('system/configaicontent');
+    }
+
     public function aisearchsync()
     {
         $post = input('post.', '', 'htmlentities');

@@ -117,20 +117,65 @@ class AnalyticsAggregator
             Db::name('AnalyticsDayDim')->where('stat_date', $statDate)->delete();
             self::insertDayDimsBySession($statDate, $start, $end, 'device', 'device_type', $now);
             self::insertDayDimsBySession($statDate, $start, $end, 'os', 'os', $now);
+            self::insertDayDimsBySession($statDate, $start, $end, 'browser', 'browser', $now);
             self::insertDayDimsBySession($statDate, $start, $end, 'channel', 'channel', $now);
             self::insertDayDimsBySession($statDate, $start, $end, 'region', 'region_code', $now);
             self::insertDayDimsByCategory($statDate, $start, $end, $now);
 
             Db::name('AnalyticsContentDay')->where('stat_date', $statDate)->delete();
+            // 分组 key 必须与 mac_analytics_content_day 的主键 (stat_date, mid, content_id) 一致，
+            // 否则同一 mid+rid 出现两个 type_id（改分类/前端埋点 type_id=0 混入）时会产生两条
+            // 主键相同的 insert，第二条报重复键错误，被下面的 catch 整天 rollback。
+            // type_id 用 max() 折叠成一个代表值，优先取真实分类而不是 0。
             $contentRows = Db::name('AnalyticsPageview')
-                ->field('mid,rid as content_id,type_id,count(*) as view_pv,count(distinct visitor_id) as view_uv,count(*) as play_or_read_cnt,ifnull(avg(stay_ms),0) as avg_stay_ms')
-                ->where('stat_date', $statDate)
-                ->where('mid', 'in', [1, 2, 8])
-                ->where('rid', '>', 0)
-                ->group('mid,rid,type_id')
+                ->alias('p')
+                ->join('__ANALYTICS_SESSION__ s', 's.session_id = p.session_id', 'left')
+                ->field('p.mid,p.rid as content_id,max(p.type_id) as type_id,count(*) as view_pv,count(distinct p.visitor_id) as view_uv,count(*) as play_or_read_cnt,ifnull(avg(p.stay_ms),0) as avg_stay_ms,ifnull(sum(case when s.is_bounce = 1 then 1 else 0 end),0) as bounce_cnt')
+                ->where('p.stat_date', $statDate)
+                ->where('p.mid', 'in', [1, 2, 8])
+                ->where('p.rid', '>', 0)
+                ->group('p.mid,p.rid')
                 ->select();
+
+            // 内容级转化/互动只能来自 mac_ulog —— mac_order 没有任何 mid/rid 字段，
+            // 它是充值订单表，与「买了哪部片」无关。
+            // ulog_type: 1=积分解锁/购买 2=收藏 3=想看
+            $ulogRows = Db::name('Ulog')
+                ->field('ulog_mid as mid,ulog_rid as content_id,ulog_type,count(*) as cnt,ifnull(sum(ulog_points),0) as points')
+                ->where('ulog_time', 'between', [$start, $end])
+                ->where('ulog_type', 'in', [1, 2, 3])
+                ->where('ulog_rid', '>', 0)
+                ->group('ulog_mid,ulog_rid,ulog_type')
+                ->select();
+            $ulogMap = [];
+            foreach ($ulogRows as $u) {
+                $k = intval($u['mid']) . ':' . intval($u['content_id']);
+                if (!isset($ulogMap[$k])) {
+                    $ulogMap[$k] = ['order_cnt' => 0, 'order_amount' => 0, 'collect_add' => 0, 'want_add' => 0];
+                }
+                $type = intval($u['ulog_type']);
+                if ($type === 1) {
+                    $ulogMap[$k]['order_cnt'] = intval($u['cnt']);
+                    $ulogMap[$k]['order_amount'] = floatval($u['points']);
+                } elseif ($type === 2) {
+                    $ulogMap[$k]['collect_add'] = intval($u['cnt']);
+                } elseif ($type === 3) {
+                    $ulogMap[$k]['want_add'] = intval($u['cnt']);
+                }
+            }
+
+            // 内容行取「有 pageview」与「有 ulog 互动」两者的并集：收藏/购买可能发生在列表页，
+            // 当天该内容没有任何 detail 页 pageview，若只以 pageview 建行会把这笔转化静默丢弃。
+            $pvKeys = [];
             foreach ($contentRows as $row) {
-                Db::name('AnalyticsContentDay')->insert([
+                $pvKeys[intval($row['mid']) . ':' . intval($row['content_id'])] = true;
+            }
+
+            $batch = [];
+            foreach ($contentRows as $row) {
+                $k = intval($row['mid']) . ':' . intval($row['content_id']);
+                $extra = isset($ulogMap[$k]) ? $ulogMap[$k] : ['order_cnt' => 0, 'order_amount' => 0, 'collect_add' => 0, 'want_add' => 0];
+                $batch[] = [
                     'stat_date' => $statDate,
                     'mid' => intval($row['mid']),
                     'content_id' => intval($row['content_id']),
@@ -139,13 +184,47 @@ class AnalyticsAggregator
                     'view_uv' => intval($row['view_uv']),
                     'play_or_read_cnt' => intval($row['play_or_read_cnt']),
                     'avg_stay_ms' => intval($row['avg_stay_ms']),
-                    'bounce_cnt' => 0,
-                    'collect_add' => 0,
-                    'want_add' => 0,
-                    'order_cnt' => 0,
-                    'order_amount' => 0,
+                    'bounce_cnt' => intval($row['bounce_cnt']),
+                    'collect_add' => $extra['collect_add'],
+                    'want_add' => $extra['want_add'],
+                    'order_cnt' => $extra['order_cnt'],
+                    'order_amount' => $extra['order_amount'],
                     'updated_at' => $now,
-                ]);
+                ];
+            }
+
+            // ulog-only 行（当天无 pageview）：先按 mid 批量回填 type_id，避免逐行查询(N+1)
+            $ulogOnlyKeys = [];
+            foreach ($ulogMap as $k => $extra) {
+                if (!isset($pvKeys[$k])) {
+                    $ulogOnlyKeys[] = $k;
+                }
+            }
+            $typeIdMap = self::lookupContentTypeIds($ulogOnlyKeys);
+            foreach ($ulogOnlyKeys as $k) {
+                $extra = $ulogMap[$k];
+                list($midStr, $contentIdStr) = explode(':', $k);
+                $batch[] = [
+                    'stat_date' => $statDate,
+                    'mid' => intval($midStr),
+                    'content_id' => intval($contentIdStr),
+                    'type_id' => isset($typeIdMap[$k]) ? $typeIdMap[$k] : 0,
+                    'view_pv' => 0,
+                    'view_uv' => 0,
+                    'play_or_read_cnt' => 0,
+                    'avg_stay_ms' => 0,
+                    'bounce_cnt' => 0,
+                    'collect_add' => $extra['collect_add'],
+                    'want_add' => $extra['want_add'],
+                    'order_cnt' => $extra['order_cnt'],
+                    'order_amount' => $extra['order_amount'],
+                    'updated_at' => $now,
+                ];
+            }
+
+            // 分块批量写入，缩短事务持有时间、减少数据库往返
+            foreach (array_chunk($batch, 500) as $chunk) {
+                Db::name('AnalyticsContentDay')->insertAll($chunk);
             }
 
             Db::commit();
@@ -226,6 +305,35 @@ class AnalyticsAggregator
                 'updated_at' => $now,
             ]);
         }
+    }
+
+    /**
+     * 按内容 key（"mid:content_id"）批量回填 type_id，返回 [key => type_id]。
+     * 按 mid 分组后每个模块一次 whereIn 查询，取代逐行查询，消除 N+1。
+     */
+    private static function lookupContentTypeIds($keys)
+    {
+        $modelMap = [1 => ['Vod', 'vod_id'], 2 => ['Art', 'art_id'], 8 => ['Manga', 'manga_id']];
+        $byMid = [];
+        foreach ($keys as $k) {
+            list($midStr, $cidStr) = explode(':', $k);
+            $mid = intval($midStr);
+            if (!isset($modelMap[$mid])) {
+                continue;
+            }
+            $byMid[$mid][] = intval($cidStr);
+        }
+        $result = [];
+        foreach ($byMid as $mid => $ids) {
+            list($modelName, $pk) = $modelMap[$mid];
+            $ids = array_values(array_unique($ids));
+            // column('type_id', $pk) 返回 [pk值 => type_id]
+            $rows = Db::name($modelName)->where($pk, 'in', $ids)->column('type_id', $pk);
+            foreach ($ids as $cid) {
+                $result[$mid . ':' . $cid] = isset($rows[$cid]) ? intval($rows[$cid]) : 0;
+            }
+        }
+        return $result;
     }
 
     private static function countPvByDevice($device, $statDate)

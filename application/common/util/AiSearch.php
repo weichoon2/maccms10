@@ -111,6 +111,21 @@ class AiSearch
         self::$llmRecorder = is_callable($recorder) ? $recorder : null;
     }
 
+    /** @var callable|null fn($mid, array $contentIds): array 返回 [content_id => score_total]；注入用于测试解耦 */
+    private static $qualityScorer = null;
+
+    /**
+     * Install a quality-score provider for the optional DB-fallback re-ranking
+     * seam. Mirrors setLlmGate. Pass null to clear the injected scorer and
+     * fall back to the default ContentQuality lookup.
+     *
+     * @param callable|null $fn fn($mid, array $contentIds): array [content_id => score_total]
+     */
+    public static function setQualityScorer($fn)
+    {
+        self::$qualityScorer = is_callable($fn) ? $fn : null;
+    }
+
     /**
      * Mixed-mode (mid=0) search: run a single LLM term expansion (treated as
      * the vod module for enabled/length checks) and reuse the resulting terms
@@ -199,6 +214,9 @@ class AiSearch
             return self::$buildForSearchMemo[$memoKey];
         }
 
+        // 注意：expandTerms 会在前台搜索请求内同步发起一次 LLM 调用，给搜索加一次外网 RTT。
+        // 已由 HttpClient 的 max(3,timeout) 秒硬超时兜底、同请求 memo 去重，且仅在 ai_search 开启时触发；
+        // 如需彻底移除搜索路径延迟，可改为离线预扩展或异步补全。
         $expansion = self::expandTerms($cfg, $module, $wd);
         $queryMerged = self::mergeQuery($wd, $expansion);
         $internal = self::buildInternalResources($wd, $module, $queryMerged);
@@ -440,13 +458,24 @@ class AiSearch
         if ($fromMeili !== null) {
             return $fromMeili;
         }
-        $rows = Db::name('Vod')
-            ->field('vod_id,vod_name,vod_pic')
-            ->where('vod_status', 1)
-            ->where('vod_name|vod_sub|vod_actor|vod_tag', 'like', $kw)
-            ->order('vod_hits desc,vod_id desc')
-            ->limit(8)
-            ->select();
+        if (self::qualityRankEnabled()) {
+            $rows = Db::name('Vod')
+                ->field('vod_id,vod_name,vod_pic')
+                ->where('vod_status', 1)
+                ->where('vod_name|vod_sub|vod_actor|vod_tag', 'like', $kw)
+                ->order('vod_hits desc,vod_id desc')
+                ->limit(30) // 质量重排候选池，大于最终返回的 8 条，给重排留空间
+                ->select();
+            $rows = self::applyQualityRank(1, $rows, 'vod_id');
+        } else {
+            $rows = Db::name('Vod')
+                ->field('vod_id,vod_name,vod_pic')
+                ->where('vod_status', 1)
+                ->where('vod_name|vod_sub|vod_actor|vod_tag', 'like', $kw)
+                ->order('vod_hits desc,vod_id desc')
+                ->limit(8)
+                ->select();
+        }
         $result = [];
         foreach ($rows as $row) {
             $result[] = [
@@ -465,13 +494,24 @@ class AiSearch
         if ($fromMeili !== null) {
             return $fromMeili;
         }
-        $rows = Db::name('Art')
-            ->field('art_id,art_name,art_pic')
-            ->where('art_status', 1)
-            ->where('art_name|art_sub|art_tag', 'like', $kw)
-            ->order('art_hits desc,art_id desc')
-            ->limit(8)
-            ->select();
+        if (self::qualityRankEnabled()) {
+            $rows = Db::name('Art')
+                ->field('art_id,art_name,art_pic')
+                ->where('art_status', 1)
+                ->where('art_name|art_sub|art_tag', 'like', $kw)
+                ->order('art_hits desc,art_id desc')
+                ->limit(30) // 质量重排候选池，大于最终返回的 8 条，给重排留空间
+                ->select();
+            $rows = self::applyQualityRank(2, $rows, 'art_id');
+        } else {
+            $rows = Db::name('Art')
+                ->field('art_id,art_name,art_pic')
+                ->where('art_status', 1)
+                ->where('art_name|art_sub|art_tag', 'like', $kw)
+                ->order('art_hits desc,art_id desc')
+                ->limit(8)
+                ->select();
+        }
         $result = [];
         foreach ($rows as $row) {
             $result[] = [
@@ -482,6 +522,77 @@ class AiSearch
             ];
         }
         return $result;
+    }
+
+    /**
+     * 是否开启按内容质量分重排（后台 analytics.quality_rank_enabled=='1'）。
+     * 默认关，读取失败/未配置一律视为关闭，不影响现状。
+     */
+    private static function qualityRankEnabled()
+    {
+        $cfg = config('maccms.analytics');
+        return is_array($cfg) && isset($cfg['quality_rank_enabled']) && (string)$cfg['quality_rank_enabled'] === '1';
+    }
+
+    /**
+     * 取质量分：优先用注入的 setQualityScorer 假分器（测试解耦），否则查 mac_content_quality（软依赖，仅启用路径触发）。
+     *
+     * @param int   $mid
+     * @param int[] $ids
+     * @return array<int, float> [content_id => score_total]
+     */
+    private static function qualityScores($mid, array $ids)
+    {
+        if (empty($ids)) {
+            return [];
+        }
+        if (is_callable(self::$qualityScorer)) {
+            $r = call_user_func(self::$qualityScorer, $mid, $ids);
+            return is_array($r) ? $r : [];
+        }
+        $rows = Db::name('ContentQuality')
+            ->where('mid', intval($mid))
+            ->whereIn('content_id', $ids)
+            ->column('score_total', 'content_id');
+        return is_array($rows) ? $rows : [];
+    }
+
+    /**
+     * 稳定重排：按 score_total 降序，缺分视为最低（-1），score 相同/缺失时保持原 hits 顺序；截前 8。
+     * PHP usort 非稳定，携带原索引作 tiebreak 以保住 hits 序。
+     *
+     * @param int    $mid
+     * @param array  $rows  已按 hits desc 取的候选行
+     * @param string $pkKey 行主键字段名（vod_id / art_id）
+     * @return array 截前 8 条后的行
+     */
+    private static function applyQualityRank($mid, array $rows, $pkKey)
+    {
+        $ids = [];
+        foreach ($rows as $row) {
+            $ids[] = intval($row[$pkKey]);
+        }
+        $scores = self::qualityScores($mid, $ids);
+        $indexed = [];
+        foreach ($rows as $i => $row) {
+            $sid = intval($row[$pkKey]);
+            $indexed[] = [
+                'row' => $row,
+                'i' => $i,
+                's' => isset($scores[$sid]) ? (float)$scores[$sid] : -1,
+            ];
+        }
+        usort($indexed, function ($a, $b) {
+            if ($a['s'] === $b['s']) {
+                return $a['i'] - $b['i'];
+            }
+            return ($b['s'] < $a['s']) ? -1 : 1;
+        });
+        $out = [];
+        foreach (array_slice($indexed, 0, 8) as $it) {
+            $out[] = $it['row'];
+        }
+        return $out;
     }
 
     /**

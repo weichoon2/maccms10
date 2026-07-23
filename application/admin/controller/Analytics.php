@@ -6,12 +6,20 @@ use think\Db;
 
 class Analytics extends Base
 {
+    public function __construct()
+    {
+        parent::__construct();
+        $this->view->config('view_path', APP_PATH . 'admin/view_new/');
+    }
+
     public function index()
     {
         $param = input();
-        $endDate = empty($param['end_date']) ? date('Y-m-d') : $param['end_date'];
-        $startDate = empty($param['start_date']) ? date('Y-m-d', strtotime('-6 day')) : $param['start_date'];
-        $dimType = empty($param['dim_type']) ? 'device' : trim($param['dim_type']);
+        // 这几个参数会回显到页面，先校验格式防止反射型 XSS，非法值回退默认。
+        $endDate = (!empty($param['end_date']) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $param['end_date'])) ? $param['end_date'] : date('Y-m-d');
+        $startDate = (!empty($param['start_date']) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $param['start_date'])) ? $param['start_date'] : date('Y-m-d', strtotime('-6 day'));
+        $allowDims = ['device', 'region', 'category', 'channel', 'os', 'browser'];
+        $dimType = (!empty($param['dim_type']) && in_array($param['dim_type'], $allowDims, true)) ? $param['dim_type'] : 'device';
         try {
             $data = $this->buildReportData($startDate, $endDate, $dimType);
         } catch (\Throwable $e) {
@@ -28,7 +36,7 @@ class Analytics extends Base
         ]);
         $this->assign('report', $data);
         $this->assign('report_json', json_encode($data, JSON_UNESCAPED_UNICODE));
-        return $this->fetch('admin@analytics/index');
+        return $this->fetch('analytics/index');
     }
 
     public function trend()
@@ -139,9 +147,14 @@ class Analytics extends Base
         $startTs = strtotime($startDate . ' 00:00:00');
         $endTs = strtotime($endDate . ' 23:59:59');
 
+        // 路径漏斗/热门路径为「近期行为」小部件，且 group by path/prev_path 在 pageview 大表上
+        // 无对应索引，长范围会触发大量行的临时表+filesort。将其扫描窗口封顶为最近 31 天，
+        // 保护数据库；概览等其它指标仍使用管理员选择的完整范围。
+        $funnelStartTs = max($startTs, $endTs - 31 * 86400);
+
         $behaviorPathRows = Db::name('AnalyticsPageview')
             ->field('path,count(*) as pv,avg(stay_ms) as avg_stay_ms')
-            ->where('ts', 'between', [$startTs, $endTs])
+            ->where('ts', 'between', [$funnelStartTs, $endTs])
             ->group('path')
             ->order('pv desc')
             ->limit(15)
@@ -149,7 +162,7 @@ class Analytics extends Base
 
         $behaviorFlowRows = Db::name('AnalyticsPageview')
             ->field('prev_path,path,count(*) as flow_cnt')
-            ->where('ts', 'between', [$startTs, $endTs])
+            ->where('ts', 'between', [$funnelStartTs, $endTs])
             ->where('prev_path', '<>', '')
             ->group('prev_path,path')
             ->order('flow_cnt desc')
@@ -199,13 +212,16 @@ class Analytics extends Base
             ->field('mid,content_id,sum(view_pv) as view_pv,sum(view_uv) as view_uv,sum(order_cnt) as order_cnt,sum(order_amount) as order_amount')
             ->where('stat_date', 'between', [$startDate, $endDate])
             ->group('mid,content_id')
-            ->having('sum(view_pv) > 0')
             ->order('view_pv asc')
             ->limit(10)
             ->select();
 
         $coldNameMap = $this->buildContentNameMap($coldRows);
         $cold = $this->buildContentItems($coldRows, $coldNameMap);
+        foreach ($cold as $idx => $item) {
+            $cold[$idx]['exposure'] = 1;
+        }
+        $cold = array_merge($cold, $this->buildZeroExposureItems($startDate, $endDate, 10));
 
         return [
             'overview' => [
@@ -266,6 +282,9 @@ class Analytics extends Base
         $rows[] = ['section' => lang('admin/analytics/report_section_behavior'), 'metric' => lang('admin/analytics/avg_bounce_rate') . '(%)', 'value' => $data['behavior']['bounce_rate']];
         foreach ($data['behavior']['top_flows'] as $flow) {
             $rows[] = ['section' => lang('admin/analytics/report_section_path'), 'metric' => $flow['from'] . ' -> ' . $flow['to'], 'value' => $flow['flow_cnt']];
+        }
+        foreach ($data['behavior']['top_paths'] as $item) {
+            $rows[] = ['section' => lang('admin/analytics/report_section_top_paths'), 'metric' => $item['path'], 'value' => 'pv=' . $item['pv'] . ' stay=' . $item['avg_stay_ms']];
         }
 
         foreach ($data['content']['hot'] as $item) {
@@ -333,6 +352,64 @@ class Analytics extends Base
         return $items;
     }
 
+    // 零曝光内容：在 [startDate,endDate] 内 mac_analytics_content_day 无任何行的已审内容（vod/art/manga）。
+    // 每个来源表各自 limit $limit（下推到 DB），合并后按 time_add desc 再截断到 $limit，确保整体有界。
+    private function buildZeroExposureItems($startDate, $endDate, $limit)
+    {
+        $sources = [
+            1 => ['table' => 'Vod', 'idField' => 'vod_id', 'nameField' => 'vod_name', 'statusField' => 'vod_status', 'timeField' => 'vod_time_add'],
+            2 => ['table' => 'Art', 'idField' => 'art_id', 'nameField' => 'art_name', 'statusField' => 'art_status', 'timeField' => 'art_time_add'],
+            8 => ['table' => 'Manga', 'idField' => 'manga_id', 'nameField' => 'manga_name', 'statusField' => 'manga_status', 'timeField' => 'manga_time_add'],
+        ];
+
+        $rows = [];
+        foreach ($sources as $mid => $cfg) {
+            $list = Db::name($cfg['table'])
+                ->alias('c')
+                ->field('c.' . $cfg['idField'] . ' as content_id, c.' . $cfg['nameField'] . ' as content_name, c.' . $cfg['timeField'] . ' as time_add')
+                ->where('c.' . $cfg['statusField'], 1)
+                ->whereNotExists(function ($query) use ($mid, $startDate, $endDate, $cfg) {
+                    $query->name('AnalyticsContentDay')
+                        ->alias('d')
+                        ->where('d.mid', $mid)
+                        ->where('d.stat_date', 'between', [$startDate, $endDate])
+                        ->whereRaw('d.content_id = c.' . $cfg['idField']);
+                })
+                ->order('c.' . $cfg['timeField'] . ' desc')
+                ->limit($limit)
+                ->select();
+
+            foreach ($list as $row) {
+                $rows[] = [
+                    'mid' => $mid,
+                    'content_id' => intval($row['content_id']),
+                    'content_name' => $row['content_name'],
+                    'time_add' => intval($row['time_add']),
+                ];
+            }
+        }
+
+        usort($rows, function ($a, $b) {
+            return $b['time_add'] - $a['time_add'];
+        });
+        $rows = array_slice($rows, 0, $limit);
+
+        $items = [];
+        foreach ($rows as $row) {
+            $items[] = [
+                'content_key' => $this->midText($row['mid']) . '-' . $row['content_id'],
+                'content_name' => $row['content_name'],
+                'view_pv' => 0,
+                'view_uv' => 0,
+                'order_cnt' => 0,
+                'order_amount' => 0.0,
+                'conversion_rate' => 0.0,
+                'exposure' => 0,
+            ];
+        }
+        return $items;
+    }
+
     private function exportPdf($data, $startDate, $endDate, $dimType)
     {
         $lines = [];
@@ -358,9 +435,20 @@ class Analytics extends Base
             $lines[] = $flow['from'] . ' -> ' . $flow['to'] . ' : ' . $flow['flow_cnt'];
         }
         $lines[] = '';
+        $lines[] = lang('admin/analytics/report_section_top_paths');
+        foreach ($data['behavior']['top_paths'] as $item) {
+            $lines[] = $item['path'] . ' pv=' . $item['pv'] . ' stay=' . $item['avg_stay_ms'];
+        }
+        $lines[] = '';
         $lines[] = lang('admin/analytics/pdf_hot_content');
         foreach ($data['content']['hot'] as $item) {
             $lines[] = $item['content_key'] . ' pv=' . $item['view_pv'] . ' conversion=' . $item['conversion_rate'] . '%';
+        }
+        $lines[] = '';
+        $lines[] = lang('admin/analytics/report_section_content_cold');
+        foreach ($data['content']['cold'] as $item) {
+            $marker = intval($item['exposure']) === 0 ? ' [zero-exposure]' : '';
+            $lines[] = $item['content_key'] . ' pv=' . $item['view_pv'] . ' conversion=' . $item['conversion_rate'] . '%' . $marker;
         }
 
         $pdf = $this->simplePdfFromLines($lines);
@@ -377,38 +465,68 @@ class Analytics extends Base
     private function simplePdfFromLines($lines)
     {
         $fontSpec = $this->detectPdfFontSpec();
-        $content = "BT\n/F1 11 Tf\n40 800 Td\n14 TL\n";
-        foreach ($lines as $line) {
-            $content .= $this->pdfTextLine($line, $fontSpec) . " Tj\nT*\n";
+        $perPage = 50;
+        $chunks = array_chunk($lines, $perPage);
+        if (empty($chunks)) {
+            $chunks = [[]];
         }
-        $content .= "ET\n";
+
+        // Object numbering: 1=Catalog, 2=Pages, 3=Font (Type0 composite or Type1 Helvetica),
+        // 4=descendant CIDFont (composite only, otherwise omitted), then page/content pairs.
+        $fontObjNum = 3;
+        if ($fontSpec['composite']) {
+            $descendantObjNum = 4;
+            $nextObjNum = 5;
+        } else {
+            $nextObjNum = 4;
+        }
 
         $objects = [];
-        $objects[] = "1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n";
-        $objects[] = "2 0 obj\n<< /Type /Pages /Count 1 /Kids [3 0 R] >>\nendobj\n";
-        $objects[] = "3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>\nendobj\n";
-        if ($fontSpec['composite']) {
-            $objects[] = "4 0 obj\n<< /Type /Font /Subtype /Type0 /BaseFont /" . $fontSpec['base_font'] . " /Encoding /" . $fontSpec['encoding'] . " /DescendantFonts [6 0 R] >>\nendobj\n";
-            $objects[] = "5 0 obj\n<< /Length " . strlen($content) . " >>\nstream\n" . $content . "endstream\nendobj\n";
-            $objects[] = "6 0 obj\n<< /Type /Font /Subtype /CIDFontType0 /BaseFont /" . $fontSpec['base_font'] . " /CIDSystemInfo << /Registry (" . $fontSpec['registry'] . ") /Ordering (" . $fontSpec['ordering'] . ") /Supplement " . intval($fontSpec['supplement']) . " >> /DW 1000 >>\nendobj\n";
-        } else {
-            $objects[] = "4 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n";
-            $objects[] = "5 0 obj\n<< /Length " . strlen($content) . " >>\nstream\n" . $content . "endstream\nendobj\n";
+        $pageObjNums = [];
+        foreach ($chunks as $chunk) {
+            $pageObjNum = $nextObjNum++;
+            $contentObjNum = $nextObjNum++;
+            $pageObjNums[] = $pageObjNum;
+
+            $content = "BT\n/F1 11 Tf\n40 800 Td\n14 TL\n";
+            foreach ($chunk as $line) {
+                $content .= $this->pdfTextLine($line, $fontSpec) . " Tj\nT*\n";
+            }
+            $content .= "ET\n";
+
+            $objects[$pageObjNum] = $pageObjNum . " 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 " . $fontObjNum . " 0 R >> >> /Contents " . $contentObjNum . " 0 R >>\nendobj\n";
+            $objects[$contentObjNum] = $contentObjNum . " 0 obj\n<< /Length " . strlen($content) . " >>\nstream\n" . $content . "endstream\nendobj\n";
         }
 
+        $kids = implode(' ', array_map(function ($n) {
+            return $n . ' 0 R';
+        }, $pageObjNums));
+
+        $objects[1] = "1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n";
+        $objects[2] = "2 0 obj\n<< /Type /Pages /Count " . count($pageObjNums) . " /Kids [" . $kids . "] >>\nendobj\n";
+        if ($fontSpec['composite']) {
+            $objects[$fontObjNum] = $fontObjNum . " 0 obj\n<< /Type /Font /Subtype /Type0 /BaseFont /" . $fontSpec['base_font'] . " /Encoding /" . $fontSpec['encoding'] . " /DescendantFonts [" . $descendantObjNum . " 0 R] >>\nendobj\n";
+            $objects[$descendantObjNum] = $descendantObjNum . " 0 obj\n<< /Type /Font /Subtype /CIDFontType0 /BaseFont /" . $fontSpec['base_font'] . " /CIDSystemInfo << /Registry (" . $fontSpec['registry'] . ") /Ordering (" . $fontSpec['ordering'] . ") /Supplement " . intval($fontSpec['supplement']) . " >> /DW 1000 >>\nendobj\n";
+        } else {
+            $objects[$fontObjNum] = $fontObjNum . " 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n";
+        }
+
+        ksort($objects);
+
         $pdf = "%PDF-1.4\n";
-        $offsets = [0];
-        foreach ($objects as $obj) {
-            $offsets[] = strlen($pdf);
+        $offsets = [0 => 0];
+        foreach ($objects as $num => $obj) {
+            $offsets[$num] = strlen($pdf);
             $pdf .= $obj;
         }
+        $objCount = count($objects);
         $xrefStart = strlen($pdf);
-        $pdf .= "xref\n0 " . (count($objects) + 1) . "\n";
+        $pdf .= "xref\n0 " . ($objCount + 1) . "\n";
         $pdf .= "0000000000 65535 f \n";
-        for ($i = 1; $i <= count($objects); $i++) {
+        for ($i = 1; $i <= $objCount; $i++) {
             $pdf .= sprintf("%010d 00000 n \n", $offsets[$i]);
         }
-        $pdf .= "trailer\n<< /Size " . (count($objects) + 1) . " /Root 1 0 R >>\nstartxref\n" . $xrefStart . "\n%%EOF";
+        $pdf .= "trailer\n<< /Size " . ($objCount + 1) . " /Root 1 0 R >>\nstartxref\n" . $xrefStart . "\n%%EOF";
         return $pdf;
     }
 

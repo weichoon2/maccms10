@@ -4,6 +4,7 @@
 
     <form class="layui-form layui-form-pane" method="post" action="" id="movementTable">
         <input id="user_id" name="user_id" type="hidden" value="{$info.user_id}">
+        <input type="hidden" name="__token__" value="{$Request.token}" />
         <div class="layui-form-item">
             <label class="layui-form-label">{:lang('access')}：</label>
             <div class="layui-input-block  ">
@@ -96,6 +97,32 @@
             <label class="layui-form-label">{:lang('admin/user/find_answer')}：</label>
             <div class="layui-input-block">
                 <input type="text" class="layui-input" value="{$info.user_answer}" placeholder="" id="user_answer" name="user_answer">
+            </div>
+        </div>
+
+        <div class="layui-form-item">
+            <label class="layui-form-label">{:lang('admin/user/profile_title')}：</label>
+            <div class="layui-input-block">
+                {if condition="empty($profile)"}
+                <span>{:lang('admin/user/profile_empty')}</span>
+                {else /}
+                <p>{:lang('admin/user/profile_completion')}：{$profile.avg_completion_rate*100}%</p>
+                <p>{:lang('admin/user/profile_activity')}：
+                    {if condition="$profile.activity_level eq 0"}{:lang('admin/user/profile_level_0')}
+                    {elseif condition="$profile.activity_level eq 1"/}{:lang('admin/user/profile_level_1')}
+                    {elseif condition="$profile.activity_level eq 2"/}{:lang('admin/user/profile_level_2')}
+                    {else /}{:lang('admin/user/profile_level_3')}
+                    {/if}
+                </p>
+                <p>{:lang('admin/user/profile_watch_cnt')}：{$profile.watch_cnt_window}</p>
+                <p>{:lang('admin/user/profile_pay_amount')}：{$profile.pay_amount_window}</p>
+                <p>{:lang('admin/user/profile_prefer_types')}：
+                    {if condition="empty($profile_types)"}—
+                    {else /}
+                    {volist name="profile_types" id="pt"}{$pt.type_id}({$pt.w}){/volist}
+                    {/if}
+                </p>
+                {/if}
             </div>
         </div>
 
