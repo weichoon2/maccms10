@@ -293,15 +293,25 @@ class Ulog extends Base {
 
     /**
      * 判断用户是否已拥有某项权限（已购买）。
-     * 与 infoData 的区别：不把 ulog_points（价格）/ ulog_time 当匹配键，
-     * 使「金币购买(记原价)」与「额度兑换(记0)」都能命中同一权限记录。
+     * 与 infoData 的区别：仅对视频下载(mid=1,type=5)忽略 ulog_points（价格），
+     * 使「金币购买(记原价)」与「额度兑换(记0)」都能命中同一下载权限记录；
+     * 其余类型保持含价格的精确匹配，避免 0 价记录（观看进度/收藏）被误判为已购。
+     * ulog_time 一律不参与匹配。
      */
     public function hasBought($where)
     {
         if (empty($where) || !is_array($where)) {
             return false;
         }
-        unset($where['ulog_points'], $where['ulog_time']);
+        // 仅视频下载(mid=1,type=5)放宽价格匹配：额度兑换记 ulog_points=0、金币购买记原价都应算已购。
+        // 其余类型（播放 type=4 的观看进度、文章/漫画 type=1 收藏等 0 价记录）保持精确匹配（含价格），
+        // 防「免费内容事后被站长改为付费」后残留的 0 价记录被误判为已购而白嫖。
+        $isVideoDownload = (intval(isset($where['ulog_mid']) ? $where['ulog_mid'] : 0) == 1
+            && intval(isset($where['ulog_type']) ? $where['ulog_type'] : 0) == 5);
+        unset($where['ulog_time']);
+        if ($isVideoDownload) {
+            unset($where['ulog_points']);
+        }
         return $this->where($where)->count() > 0;
     }
 
