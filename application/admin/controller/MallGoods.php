@@ -6,6 +6,7 @@ class MallGoods extends Base
     public function __construct()
     {
         parent::__construct();
+        $this->view->config('view_path', APP_PATH . 'admin/view_new/');
     }
 
     public function index()
@@ -37,7 +38,7 @@ class MallGoods extends Base
         $param['limit'] = '{limit}';
         $this->assign('param', $param);
         $this->assign('title', lang('mall/admin_title'));
-        return $this->fetch('admin@mall_goods/index');
+        return $this->fetch('mall_goods/index');
     }
 
     public function info()
@@ -82,7 +83,7 @@ class MallGoods extends Base
         $this->assign('info', $info);
         $this->assign('group_list', model('Group')->getCache());
         $this->assign('title', lang('mall/admin_title'));
-        return $this->fetch('admin@mall_goods/info');
+        return $this->fetch('mall_goods/info');
     }
 
     public function del()

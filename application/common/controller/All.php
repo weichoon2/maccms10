@@ -2,6 +2,7 @@
 namespace app\common\controller;
 use think\Controller;
 use think\Cache;
+use think\Db;
 use think\Request;
 use app\common\util\AnalyticsServerTracker;
 
@@ -728,28 +729,56 @@ polyfill;
                 $popedom =  $this->check_user_popedom($info['type_id'], 4,$param,$flag,$info);
             }
 
+            // 整部积分=1；按集=其它。按集下载不走整页锁，改为逐集打标
+            $is_whole_points = (!empty($GLOBALS['config']['user']['vod_points_type']) && $GLOBALS['config']['user']['vod_points_type'] == '1');
+
             if($pe==0 && $popedom['code']>1 && empty($popedom["trysee"])){
                 $info['player_info']['flag'] = $flag;
 
-                // 下载页面：清空下载列表
-                if ($flag == 'down') {
-                    $info['vod_down_list'] = [];
+                if ($flag == 'down' && !$is_whole_points) {
+                    // 分集：继续走正常渲染，末尾 applyVodDownEpisodeLocks
+                    $this->assign('obj', $info);
+                } else {
+                    // 整部下载无权限：保留集名供预览，清空真实地址
+                    if ($flag == 'down' && !empty($info['vod_down_list']) && is_array($info['vod_down_list'])) {
+                        foreach ($info['vod_down_list'] as $dk => $dgroup) {
+                            // 组级 url 是整组全集明文拼接串，一并清空防泄露
+                            $info['vod_down_list'][$dk]['url'] = '';
+                            if (empty($dgroup['urls']) || !is_array($dgroup['urls'])) {
+                                continue;
+                            }
+                            foreach ($dgroup['urls'] as $uk => $urow) {
+                                $info['vod_down_list'][$dk]['urls'][$uk]['url'] = '';
+                                $info['vod_down_list'][$dk]['urls'][$uk]['locked'] = 1;
+                            }
+                        }
+                    }
+
+                    $this->assign('obj',$info);
+
+                    // 不再跳转确认页，直接进入播放页/下载页，由模板内的权限引导进行购买/充值
+                    $vod_popedom_locked = true;
                 }
-
-                $this->assign('obj',$info);
-
-                // 不再跳转确认页，直接进入播放页/下载页，由模板内的权限引导进行购买/充值
-                $vod_popedom_locked = true;
             }
         }
         $this->assign('popedom',$popedom);
 
         if (!empty($vod_popedom_locked)) {
+            // 与 check_user_popedom 一致：整片积分模式用 vod_points
+            $lock_points = intval(isset($info['vod_points_'.$flag]) ? $info['vod_points_'.$flag] : 0);
+            if (isset($GLOBALS['config']['user']['vod_points_type']) && $GLOBALS['config']['user']['vod_points_type'] == '1') {
+                $lock_points = intval(isset($info['vod_points']) ? $info['vod_points'] : 0);
+            }
+            if ($lock_points > 0 && (empty($popedom['points']) || intval($popedom['points']) <= 0)) {
+                $popedom['points'] = $lock_points;
+                $popedom['confirm'] = 1;
+                $this->assign('popedom', $popedom);
+            }
             $player_info = [
                 'flag' => $flag,
                 'encrypt' => 0,
                 'trysee' => 0,
-                'points' => intval($info['vod_points_'.$flag]),
+                'points' => $lock_points,
                 'link' => '',
                 'link_next' => '',
                 'link_pre' => '',
@@ -871,6 +900,109 @@ polyfill;
         $__vodTagwall = mac_vod_play_tagwall_payload($info);
         $this->assign('vod_play_tagwall_enabled', $__vodTagwall['enabled']);
         $this->assign('vod_play_tagwall_json', $__vodTagwall['json']);
+
+        // 按集下载：逐集锁定未购买条目（整部模式不进此分支）
+        if ($flag == 'down' && (empty($GLOBALS['config']['user']['vod_points_type']) || $GLOBALS['config']['user']['vod_points_type'] != '1')) {
+            $info = $this->applyVodDownEpisodeLocks($info);
+            if (empty($info['player_info']) || !is_array($info['player_info'])) {
+                $info['player_info'] = [];
+            }
+            $info['player_info']['flag'] = 'down';
+            $ep_points = intval(isset($info['vod_points_down']) ? $info['vod_points_down'] : 0);
+            $info['player_info']['points'] = $ep_points;
+            // 防止 player_data 泄露未购集真实地址
+            $cur_sid = intval(isset($param['sid']) ? $param['sid'] : 0);
+            $cur_nid = intval(isset($param['nid']) ? $param['nid'] : 0);
+            if (!empty($info['vod_down_list'][$cur_sid]['urls'][$cur_nid]['locked'])) {
+                $info['player_info']['url'] = '';
+            }
+            // url_next 对应下一集(nid+1)，按下一集自身是否 locked 独立判定：
+            // 当前集已购、下一集未购时，不得因“跟随当前集”而泄露下一集真实地址
+            if (!empty($info['vod_down_list'][$cur_sid]['urls'][$cur_nid + 1]['locked'])) {
+                $info['player_info']['url_next'] = '';
+            }
+            if ($ep_points > 0 && (empty($popedom['points']) || intval($popedom['points']) <= 0)) {
+                $popedom['points'] = $ep_points;
+                $this->assign('popedom', $popedom);
+            }
+            $this->assign('obj', $info);
+            $this->assign('down_pay_ep', 1);
+            // 按集模式重写 player_data，去掉可能已写入的明文 url
+            if ($pe == 0) {
+                $this->assign('player_data', '<script type="text/javascript">var player_aaaa=' . json_encode($info['player_info']) . '</script>');
+            }
+        }
+
+        return $info;
+    }
+
+    /**
+     * 按集下载：未购买的集清空 url 并标记 locked=1（防源码泄露）
+     */
+    protected function applyVodDownEpisodeLocks($info)
+    {
+        if (empty($info['vod_down_list']) || !is_array($info['vod_down_list'])) {
+            return $info;
+        }
+
+        $user = isset($GLOBALS['user']) && is_array($GLOBALS['user']) ? $GLOBALS['user'] : [];
+        $uid = intval(isset($user['user_id']) ? $user['user_id'] : 0);
+        $group_ids = explode(',', isset($user['group_id']) ? $user['group_id'] : '1');
+        $max_gid = max(array_map('intval', $group_ids));
+        $points = intval(isset($info['vod_points_down']) ? $info['vod_points_down'] : 0);
+
+        // VIP 或未设置下载积分：不锁
+        if ($max_gid >= 3 || $points <= 0) {
+            foreach ($info['vod_down_list'] as $dk => $dgroup) {
+                if (empty($dgroup['urls']) || !is_array($dgroup['urls'])) {
+                    continue;
+                }
+                foreach ($dgroup['urls'] as $uk => $urow) {
+                    $info['vod_down_list'][$dk]['urls'][$uk]['locked'] = 0;
+                }
+            }
+            return $info;
+        }
+
+        $bought = [];
+        if ($uid > 0) {
+            $rows = Db::name('ulog')
+                ->where('user_id', $uid)
+                ->where('ulog_mid', 1)
+                ->where('ulog_type', 5)
+                ->where('ulog_rid', intval($info['vod_id']))
+                ->field('ulog_sid,ulog_nid')
+                ->select();
+            if (!empty($rows)) {
+                foreach ($rows as $r) {
+                    $bought[intval($r['ulog_sid']) . '-' . intval($r['ulog_nid'])] = 1;
+                }
+            }
+        }
+
+        foreach ($info['vod_down_list'] as $dk => $dgroup) {
+            $sid = intval(isset($dgroup['sid']) ? $dgroup['sid'] : $dk);
+            if (empty($dgroup['urls']) || !is_array($dgroup['urls'])) {
+                continue;
+            }
+            $has_locked = false;
+            foreach ($dgroup['urls'] as $uk => $urow) {
+                $nid = intval(isset($urow['nid']) ? $urow['nid'] : $uk);
+                $ok = !empty($bought[$sid . '-' . $nid]);
+                if (!$ok) {
+                    $info['vod_down_list'][$dk]['urls'][$uk]['url'] = '';
+                    $info['vod_down_list'][$dk]['urls'][$uk]['locked'] = 1;
+                    $has_locked = true;
+                } else {
+                    $info['vod_down_list'][$dk]['urls'][$uk]['locked'] = 0;
+                }
+            }
+            // 组级 url 是整组全集明文拼接串，本组存在未购集则一并清空防泄露
+            if ($has_locked) {
+                $info['vod_down_list'][$dk]['url'] = '';
+            }
+        }
+
         return $info;
     }
 
@@ -1039,7 +1171,8 @@ polyfill;
             }
             if ($popedom == 4) {
                 if (max($group_ids) == 1 && $points > 0) {
-                    return ['code' => 4001, 'msg' => lang('controller/charge_data'), 'trysee' => 0];
+                    // 游客也需带回 points，供下载/播放页内嵌购买门展示「确认购买」
+                    return ['code' => 4001, 'msg' => lang('controller/charge_data'), 'points' => $points, 'confirm' => 1, 'trysee' => 0];
                 } elseif (max($group_ids) == 2 && $points > 0) {
                     $where = [];
                     $where['ulog_mid'] = 1;
@@ -1048,7 +1181,6 @@ polyfill;
                     $where['ulog_sid'] = $param['sid'];
                     $where['ulog_nid'] = $param['nid'];
                     $where['user_id'] = $user['user_id'];
-                    $where['ulog_points'] = $points;
                     if ($GLOBALS['config']['user']['vod_points_type'] == '1') {
                         $where['ulog_sid'] = 0;
                         $where['ulog_nid'] = 0;

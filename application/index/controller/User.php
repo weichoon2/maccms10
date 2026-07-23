@@ -19,7 +19,7 @@ class User extends Base
 
         //判断用户登录状态
         $ac = request()->action();
-        $guestAllowedActions = ['login', 'logout', 'ajax_login', 'reg', 'findpass', 'findpass_msg', 'findpass_reset', 'reg_msg', 'oauth', 'logincallback', 'visit', 'index', 'ajax_upgrade'];
+        $guestAllowedActions = ['login', 'logout', 'ajax_login', 'reg', 'findpass', 'findpass_msg', 'findpass_reset', 'reg_msg', 'oauth', 'logincallback', 'visit', 'index', 'ajax_upgrade', 'ajax_buy_popedom'];
         $guestAllowedGetActions = ['buy', 'plays', 'upgrade', 'checkin', 'ajax_mall_goods', 'ajax_mall_orders'];
         if (in_array($ac, $guestAllowedActions) || (in_array($ac, $guestAllowedGetActions) && !Request()->isPost())) {
             // 游客可访问的页面也注入 obj，避免模板判断分支缺少变量
@@ -100,6 +100,18 @@ class User extends Base
 
     public function ajax_buy_popedom()
     {
+        if (empty($GLOBALS['user']['user_id']) || intval($GLOBALS['user']['user_id']) < 1) {
+            return json(['code' => 1001, 'msg' => lang('api/please_login_first')]);
+        }
+        // 会扣积分/写 ulog 的写接口：强制 POST + CSRF，防跨站诱导非自愿扣费购买
+        if (!Request()->isPost()) {
+            return json(['code' => 1002, 'msg' => lang('param_err')]);
+        }
+        $csrfErr = $this->checkCsrf();
+        if ($csrfErr !== null) {
+            return json($csrfErr);
+        }
+
         $param = input();
         $data = [];
         $data['ulog_mid'] = intval($param['mid']) <=0 ? 1: intval($param['mid']);
